@@ -1,12 +1,30 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Tack.App.ViewModels"
+        xmlns:views="using:Tack.App.Views"
         x:Class="Tack.App.MainWindow"
-        Width="640" Height="420" Title="tack"
-        WindowStartupLocation="CenterScreen">
-  <StackPanel Margin="28" Spacing="14" VerticalAlignment="Center">
-    <TextBlock Text="tack" FontSize="40" FontWeight="Bold" />
-    <TextBlock Text="Per-directory tool-version dispatcher for Windows." FontSize="16" Opacity="0.85" />
-    <TextBlock TextWrapping="Wrap" Opacity="0.6"
-               Text="M0 skeleton. The real UI - dashboard, directory inspector, registry and bindings editors, and the PATH doctor - arrives in M4." />
-  </StackPanel>
+        x:DataType="vm:MainWindowViewModel"
+        Width="1000" Height="680" MinWidth="760" MinHeight="480"
+        Title="tack" WindowStartupLocation="CenterScreen">
+
+  <TabControl TabStripPlacement="Left" SelectedIndex="{Binding SelectedTabIndex}" Padding="0">
+    <TabItem Header="Dashboard">
+      <views:DashboardView DataContext="{Binding Dashboard}" />
+    </TabItem>
+    <TabItem Header="Inspector">
+      <views:InspectorView DataContext="{Binding Inspector}" />
+    </TabItem>
+    <TabItem Header="Registry">
+      <views:RegistryView DataContext="{Binding Registry}" />
+    </TabItem>
+    <TabItem Header="Bindings">
+      <views:BindingsView DataContext="{Binding Bindings}" />
+    </TabItem>
+    <TabItem Header="PATH">
+      <views:PathView DataContext="{Binding Path}" />
+    </TabItem>
+    <TabItem Header="Shims">
+      <views:ShimsView DataContext="{Binding Shims}" />
+    </TabItem>
+  </TabControl>
 </Window>

@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Tack.App.ViewModels"
+             x:Class="Tack.App.Views.DashboardView"
+             x:DataType="vm:DashboardViewModel">
+  <DockPanel Margin="18">
+
+    <StackPanel DockPanel.Dock="Top" Spacing="10">
+      <TextBlock Text="Dashboard" FontSize="22" FontWeight="Bold" />
+      <TextBlock Text="How every registered tool resolves for a directory - the shim's answer, wherever the process was launched."
+                 Opacity="0.7" TextWrapping="Wrap" />
+
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
+        <TextBlock Grid.Column="0" Text="Directory" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Text="{Binding Directory}" />
+        <Button Grid.Column="2" Content="Browse..." Command="{Binding BrowseCommand}" />
+        <Button Grid.Column="3" Content="Use current" Command="{Binding UseCurrentCommand}" />
+        <Button Grid.Column="4" Content="Refresh" Command="{Binding RefreshCommand}" />
+      </Grid>
+
+      <StackPanel Orientation="Horizontal" Spacing="16">
+        <TextBlock Text="{Binding Summary}" Opacity="0.85" />
+        <TextBlock Text="{Binding ShimsStatus}" FontWeight="SemiBold" />
+      </StackPanel>
+
+      <Border BorderThickness="0,0,0,1" BorderBrush="#33888888" Padding="0,6,0,6" Margin="0,4,0,0">
+        <Grid ColumnDefinitions="1.4*,1.4*,1.2*,2*,3*">
+          <TextBlock Grid.Column="0" Text="TOOL" FontWeight="Bold" FontSize="11" Opacity="0.6" />
+          <TextBlock Grid.Column="1" Text="RESOLVES TO" FontWeight="Bold" FontSize="11" Opacity="0.6" />
+          <TextBlock Grid.Column="2" Text="SOURCE" FontWeight="Bold" FontSize="11" Opacity="0.6" />
+          <TextBlock Grid.Column="3" Text="WHY" FontWeight="Bold" FontSize="11" Opacity="0.6" />
+          <TextBlock Grid.Column="4" Text="BINARY" FontWeight="Bold" FontSize="11" Opacity="0.6" />
+        </Grid>
+      </Border>
+    </StackPanel>
+
+    <ListBox ItemsSource="{Binding Rows}" Margin="0,4,0,0" Background="Transparent">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:ResolutionRow">
+          <Grid ColumnDefinitions="1.4*,1.4*,1.2*,2*,3*">
+            <TextBlock Grid.Column="0" Text="{Binding Tool}" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Text="{Binding Version}" />
+            <TextBlock Grid.Column="2" Text="{Binding SourceLabel}" Foreground="{Binding SourceBrush}" />
+            <TextBlock Grid.Column="3" Text="{Binding Why}" Opacity="0.75" TextWrapping="Wrap" />
+            <TextBlock Grid.Column="4" Text="{Binding Binary}" FontFamily="Cascadia Code,Consolas,monospace"
+                       FontSize="12" Opacity="0.85" TextWrapping="Wrap" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

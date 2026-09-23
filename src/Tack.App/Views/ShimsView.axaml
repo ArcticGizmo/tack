@@ -1,0 +1,35 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Tack.App.ViewModels"
+             x:Class="Tack.App.Views.ShimsView"
+             x:DataType="vm:ShimsViewModel">
+  <DockPanel Margin="18">
+
+    <StackPanel DockPanel.Dock="Top" Spacing="8">
+      <TextBlock Text="Shims" FontSize="22" FontWeight="Bold" />
+      <TextBlock Text="One proxy exe per exposed binary, sitting on PATH. Reshim regenerates them from the registry."
+                 Opacity="0.7" TextWrapping="Wrap" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock Text="Shims dir:" VerticalAlignment="Center" Opacity="0.7" />
+        <TextBlock Text="{Binding ShimsDir}" FontFamily="Cascadia Code,Consolas,monospace" FontSize="12"
+                   VerticalAlignment="Center" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <TextBlock Text="{Binding Status}" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <Button Content="Reshim" Command="{Binding ReshimCommand}" Classes="accent" />
+        <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+      </StackPanel>
+    </StackPanel>
+
+    <ListBox ItemsSource="{Binding Shims}" Margin="0,12,0,0" Background="Transparent">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:ShimRow">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Text="{Binding Name}" Foreground="{Binding Brush}" />
+            <TextBlock Grid.Column="1" Text="{Binding StaleMark}" Foreground="#E0A800" FontSize="12" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>
