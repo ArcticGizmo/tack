@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    tack-shim: the tiny NativeAOT proxy copied per shimmed tool. Identifies its tool from its own filename,
+    resolves the real target for the cwd from resolved.json, and proxies it (args, std handles, exit code,
+    Ctrl-C, .cmd targets). Runs on EVERY tool call, so cold start is the whole ballgame - NativeAOT, source
+    -gen JSON, no YAML. Graduated from spikes/m1-shim after the M1 spike passed (docs/m1-spike-findings.md).
+
+    NOTE: PublishAot needs the "Desktop development with C++" workload (MSVC linker) to LINK. publish.bat
+    falls back to a self-contained single-file build locally when it's absent; CI (release.yml) links AOT.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>tack-shim</AssemblyName>
+    <RootNamespace>Tack.Shim</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <PublishAot>true</PublishAot>
+    <StackTraceSupport>false</StackTraceSupport>
+    <OptimizationPreference>Size</OptimizationPreference>
+  </PropertyGroup>
+</Project>

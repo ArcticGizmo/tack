@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The `tack` command (assembly/exe name `tack`). Console app. The rich Spectre.Console CLI is M3; M0
+       ships just the version command and `tack open` (launch the UI). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Tack.Cli</RootNamespace>
+    <AssemblyName>tack</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Velopack" Version="1.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tack.Core\Tack.Core.csproj" />
+  </ItemGroup>
+</Project>

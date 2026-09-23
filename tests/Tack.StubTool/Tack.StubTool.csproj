@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A stand-in "real tool" for the shim tests: prints its identity + cwd + forwarded args + stdin and
+       exits with a chosen code, so tests can assert correct dispatch, cwd, arg/stdin forwarding, and exit
+       -code propagation against the real exec mechanism (not a mock). Test-only. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>tack-stub</AssemblyName>
+    <RootNamespace>Tack.StubTool</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

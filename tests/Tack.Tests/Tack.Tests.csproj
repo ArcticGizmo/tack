@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    xUnit over Tack.Core + the shim. The shim tests run the ACTUAL shim exe (renamed per tool, as in
+    production) against the stub and real .cmd files: exit codes, arg/stdin forwarding, cwd, per-directory
+    dispatch. Both the shim and the stub are ProjectReferenced so their build outputs land in this project's
+    bin dir; the tests invoke the produced executables, not the managed API. A plain `dotnet test` builds
+    everything it needs. (AOT is validated separately in CI / tools/bench-shim.ps1.)
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Tack.Core\Tack.Core.csproj" />
+    <ProjectReference Include="..\..\src\Tack.Shim\Tack.Shim.csproj" />
+    <ProjectReference Include="..\Tack.StubTool\Tack.StubTool.csproj" />
+  </ItemGroup>
+</Project>

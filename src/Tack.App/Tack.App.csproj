@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Avalonia desktop head (exe name `tack-ui`, WinExe). Launched by `tack open`, and the Velopack
+       Start-Menu shortcut target. M0 is a placeholder window; the real screens (dashboard, directory
+       inspector, registry/bindings editors, PATH doctor) are M4. This head also hosts the Velopack install
+       lifecycle callbacks that wire tack onto the user PATH. Windows-only in v1. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>Tack.App</RootNamespace>
+    <AssemblyName>tack-ui</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.0.5" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.5" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.5" />
+    <PackageReference Include="Velopack" Version="1.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tack.Core\Tack.Core.csproj" />
+  </ItemGroup>
+</Project>
