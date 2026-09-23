@@ -50,6 +50,19 @@ decides, the UI presents). No resolution or maintenance logic lives in the front
   binding validation, and a launch smoke-test confirms the window initializes. The 47 Core tests are
   unchanged and green.
 
+## Running locally (dev profile)
+
+A dev build must not clobber an installed release's data, so `TackProfile` (Tack.Core) routes a **Debug**
+build to an isolated `%LOCALAPPDATA%\tack (Dev)` data space (its own config.json, resolved.json and shims);
+a release install uses `%LOCALAPPDATA%\tack`. Force either way with `TACK_DEV=1` / `TACK_DEV=0`. The window
+title and `tack doctor` show the dev profile so it's obvious which space you're in.
+
+- **`run-ui.bat`** launches the UI from source (`dotnet run --project src/Tack.App`).
+- **`run.bat open`** also works now: `tack open` locates the sibling `Tack.App` build for the same
+  configuration when tack-ui isn't co-located (the dev layout), instead of failing with "tack-ui not found".
+- In dev the shims dir genuinely isn't on PATH (install-time wiring is release-only), so `tack doctor` will
+  flag that - expected, and it says so.
+
 ## Next: M5 - distribution hardening
 
 `install.ps1` + `SHA256SUMS.txt` + `release.yml`, the ported `test-install.ps1` suite, and first-run

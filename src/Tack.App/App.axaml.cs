@@ -43,6 +43,9 @@ public class App : Application
             // Composition root: build the window, wire Core + the folder-picker (which needs the window's
             // StorageProvider) into the shell view model.
             var window = new MainWindow();
+            // A dev build runs against an isolated data space (see TackProfile); label the window so it's
+            // obvious this isn't touching an installed tack's config/shims.
+            window.Title = "tack" + Tack.Core.TackProfile.DisplaySuffix;
             var services = new TackServices();
             var dialogs = new DialogService(window);
             window.DataContext = new MainWindowViewModel(services, dialogs);
