@@ -1,12 +1,17 @@
+using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using Palette.Theming;
+using Tack.App.Changelog;
 using Tack.App.Services;
 using Tack.App.ViewModels;
+using Tack.App.Windows;
+using Tack.Core.Changelog;
 
 namespace Tack.App;
 
@@ -50,8 +55,59 @@ public class App : Application
             var dialogs = new DialogService(window);
             window.DataContext = new MainWindowViewModel(services, dialogs);
             desktop.MainWindow = window;
+
+            // First launch after an update: capture the changelog entries newer than the version that last
+            // ran here, then stamp the current version so they're only ever shown once. A null last-seen is a
+            // fresh install (or the first run of this feature) - seed it silently, nothing to pop.
+            var pending = ResolvePendingChangelog();
+            StampSeenVersion();
+            if (pending is { Count: > 0 })
+                Dispatcher.UIThread.Post(() => ShowChangelog(window, pending), DispatcherPriority.Background);
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static readonly UiStateStore _uiStore = new();
+
+    // Picks the changelog sections to surface on this launch: nothing unless the feature is on, we have a
+    // prior version on record, and it differs from the current one - then only the sections in between.
+    private static IReadOnlyList<ChangelogSection>? ResolvePendingChangelog()
+    {
+        var state = _uiStore.Load();
+        if (!state.ShowChangelogOnUpdate) return null;
+        if (string.IsNullOrWhiteSpace(state.LastSeenVersion)) return null; // fresh install - nothing to show
+        string current = VersionInfo.Of(typeof(App).Assembly);
+        if (state.LastSeenVersion == current) return null;                 // same version - no update
+        var markdown = ChangelogMarkdown.LoadEmbedded();
+        if (markdown is null) return null;
+        var sections = ChangelogParser.UnseenSince(markdown, state.LastSeenVersion, current);
+        return sections.Count > 0 ? sections : null;
+    }
+
+    // Record the running version as "seen" so the popup fires at most once per update.
+    private static void StampSeenVersion()
+    {
+        var state = _uiStore.Load();
+        string current = VersionInfo.Of(typeof(App).Assembly);
+        if (state.LastSeenVersion != current)
+        {
+            state.LastSeenVersion = current;
+            _uiStore.Save(state);
+        }
+    }
+
+    private static void ShowChangelog(Avalonia.Controls.Window owner, IReadOnlyList<ChangelogSection> sections)
+    {
+        string subhead = sections.Count == 1
+            ? $"Updated to {sections[0].Display}."
+            : $"Updated to {sections[0].Display} - {sections.Count} releases since {sections[^1].Display}.";
+        var win = new ChangelogWindow("What's new in tack", subhead, sections, onSuppress: () =>
+        {
+            var state = _uiStore.Load();
+            state.ShowChangelogOnUpdate = false;
+            _uiStore.Save(state);
+        });
+        win.Show(owner);
     }
 }

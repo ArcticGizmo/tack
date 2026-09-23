@@ -36,16 +36,11 @@ app.Configure(cfg =>
         .WithDescription("Recompile central config and regenerate the shims.");
     cfg.AddCommand<OpenCommand>("open").WithAlias("ui")
         .WithDescription("Launch the tack desktop UI.");
+    cfg.AddCommand<ChangelogCommand>("changelog")
+        .WithDescription("Show what changed in tack (latest release; --all for the full history).");
 });
 
 return app.Run(args);
 
-static string ResolveVersion()
-{
-    var asm = Assembly.GetExecutingAssembly();
-    string v = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-        ?? asm.GetName().Version?.ToString()
-        ?? "0.0.0";
-    int plus = v.IndexOf('+');
-    return plus >= 0 ? v[..plus] : v;
-}
+static string ResolveVersion() =>
+    Tack.Core.Changelog.VersionInfo.Of(Assembly.GetExecutingAssembly());

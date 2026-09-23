@@ -28,4 +28,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Tack.Core\Tack.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- The changelog is embedded so the What's New tab and the post-update popup can render it at runtime
+         (read via the assembly manifest under the logical name "Tack.CHANGELOG.md"). -->
+    <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="Tack.CHANGELOG.md" />
+  </ItemGroup>
 </Project>

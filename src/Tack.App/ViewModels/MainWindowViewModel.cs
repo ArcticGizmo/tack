@@ -19,6 +19,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         Bindings = new BindingsViewModel(services);
         Path = new PathViewModel(services);
         Shims = new ShimsViewModel(services);
+        Changelog = new ChangelogViewModel();
 
         SelectCommand = new RelayCommand<string>(s =>
         {
@@ -40,6 +41,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     public BindingsViewModel Bindings { get; }
     public PathViewModel Path { get; }
     public ShimsViewModel Shims { get; }
+    public ChangelogViewModel Changelog { get; }
 
     public int SelectedTabIndex
     {
@@ -60,6 +62,7 @@ public sealed class MainWindowViewModel : ViewModelBase
             case 3: Bindings.Refresh(); break;
             case 4: Path.Refresh(); break;
             case 5: Shims.Refresh(); break;
+            case 6: Changelog.Refresh(); break;
         }
     }
 }

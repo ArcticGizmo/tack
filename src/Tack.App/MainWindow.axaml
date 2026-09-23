@@ -59,6 +59,11 @@
               <TextBlock Text="Shims" FontSize="14" Foreground="{DynamicResource FgBrush}" />
             </Border>
           </Button>
+          <Button Classes="nav" Command="{Binding SelectCommand}" CommandParameter="6">
+            <Border Classes="navitem" Classes.active="{Binding SelectedTabIndex, Converter={StaticResource IntEq}, ConverterParameter=6}">
+              <TextBlock Text="What's New" FontSize="14" Foreground="{DynamicResource FgBrush}" />
+            </Border>
+          </Button>
         </StackPanel>
       </DockPanel>
     </Border>
@@ -74,6 +79,7 @@
       <views:BindingsView DataContext="{Binding Bindings}" />
       <views:PathView DataContext="{Binding Path}" />
       <views:ShimsView DataContext="{Binding Shims}" />
+      <views:ChangelogView DataContext="{Binding Changelog}" />
     </Carousel>
   </Grid>
 </Window>
