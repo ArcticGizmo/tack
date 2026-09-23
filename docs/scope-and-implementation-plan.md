@@ -231,6 +231,86 @@ shims. PATH mutation lives behind a `Tack.Core` interface (`IPathEnvironment`) w
 implementation, mirroring perch's "every OS capability behind an interface" convention, so a mac/linux
 head can implement the shell-profile equivalent later.
 
+### 5.5 Multi-binary tools: siblings and global bins
+
+A "tool" in tack is not one binary — it can own several, and they must all resolve to **the same version**
+for a given directory. There are two kinds.
+
+**Sibling binaries (ship inside the install).** `node` comes with `npm`, `npx`, `corepack` in the *same*
+`binDir`. So a registration exposes a set, and resolution keys on the **owning tool**, never on the binary
+name:
+
+```
+node@20.11 → { binDir, exposes: ["node","npm","npx","corepack"] }
+```
+
+`shims\index.json` maps each exposed name → its owning tool (`npm → node`), so when the `npm` shim runs it
+resolves *node's* version for the cwd and execs that version's `npm.cmd`. This is what makes "node@20 here"
+imply "npm@20 here" for free. (The M1 spike simplified this — each shim resolved its own name; the
+owning-tool grouping is registry work in M2/M3.)
+
+**Global-package bins (installed later, e.g. `npm i -g typescript` → `tsc`).** These are the interesting
+case, and they hinge on where npm puts globals:
+
+- By default on Windows npm's global **prefix is `%APPDATA%\npm`** — *not* inside the node install and
+  **shared across every node version**. So globals are already on PATH but are **not** version-scoped (the
+  single last-installed one wins). That shared global is the exact mess version managers exist to fix.
+- The prefix is configurable, and **only if it is per-version** can globals be version-scoped.
+
+So there are two regimes, and `tack info` / `tack doctor` must always state which one a node version is in:
+
+- **Shared prefix (default):** globals resolve everywhere but aren't version-scoped. tack can still shim
+  them (see the `.exe` bonus below) but points at the one shared set.
+- **Per-version prefix:** tack enumerates that version's global bin dir at reshim and generates a shim per
+  tool, each **owned by that node version**. Resolving `tsc` in a dir = resolve node for the dir → look in
+  *that* version's global prefix. True per-directory globals — the thing users actually want.
+
+The model generalizes: a registration owns a static `exposes` set **plus** an optional dynamic `globalBin`
+dir whose contents are enumerated at reshim; everything in both sets is a shim owned by that version. The
+same shape covers pip/`pipx`, gem, cargo, etc. — different per-tool data, one mechanism.
+
+**`.exe` bonus.** Global npm bins are `.cmd`/`.ps1`/shell scripts, so they are found only by shells via
+`PATHEXT`, never by a bare `CreateProcess("tsc")`. Shimming them as real `tsc.exe` makes them reachable by
+non-shell callers *and* version-scoped — a genuine improvement over vanilla npm globals, not just parity.
+(Local per-project `node_modules\.bin` tools are a third category npm/npx already resolve per-project; tack
+does not touch those. tack owns the toolchain binaries + the global layer.)
+
+**Two hard parts (why this is a later feature, not v1 core):** (a) getting per-version scoping requires a
+per-version prefix, which nudges tack toward *configuring npm* — in tension with the "dispatch, don't
+manage installs" stance; the safe default is *reflect* whatever prefix is configured and only scope when it
+is already per-version. (b) Staleness — a brand-new global bin has no shim until the next reshim (the
+classic rbenv/asdf `rehash` problem); see 5.6.
+
+### 5.6 Auto-reshim: keeping globals in sync
+
+The staleness papercut (globals installed after the last reshim are invisible) is the top complaint about
+shim managers. tack can hide it — and doing so does **not** cross the non-goal line: tack *observing* that
+your npm installed something and refreshing its mirror is not tack *installing* anything. Three mechanisms,
+cheapest-to-reason-about last:
+
+1. **Arg-sniffing.** The `npm` shim inspects argv and reshims after the child exits when it looks like a
+   global install/uninstall. Targeted, but npm/pnpm/yarn/pip grammars are a swamp (`i -g`,
+   `install --global`, `--location=global`, `npm_config_global`, `corepack enable`, ...) so it has false
+   negatives and catches only changes made *through that shim*.
+2. **Stamp / mtime poll-on-use (recommended).** A shim whose owning tool declares a `globalBin` cheaply
+   checks "has that prefix changed since my last reshim?" (one dir stat vs a stored stamp) and reshims if
+   so. **Mechanism-agnostic** (catches any change however it happened), no brittle CLI parsing, sub-ms
+   hot-path cost, no daemon. It refreshes exactly when you next invoke the tool — which is when you'd
+   notice.
+3. **Background watcher.** A tack process watches the prefix dirs and reshims in real time. Robust but a
+   daemon — scope creep for a tool that is otherwise just files on PATH.
+
+**Architecture rule (all mechanisms):** keep the knowledge *out of the AOT shim* — it must stay tiny, fast
+and generic, never learning npm syntax. The compiled `resolved.json` carries per-tool data (`globalBin`,
+`reshimStamp`, and for option 1 optional `reshimIf` patterns); the shim does only the cheap check and, on a
+hit, spawns `tack reshim` **after the child exits** (the new bin doesn't exist until then), then propagates
+the child's exit code. The heavy, tool-specific logic lives in `Tack.Core`/the CLI. Reshim must be
+idempotent and locked (concurrent installs in two shells).
+
+**Sequencing:** auto-reshim only means something once 5.5's global-bin enumeration exists (nothing to sync
+otherwise). Both are v1.x polish, cleanly separable from the M2 core, and gated behind a config toggle for
+people who want deterministic, explicit reshims.
+
 ---
 
 ## 6. The `tack` CLI (Spectre.Console)
@@ -338,7 +418,8 @@ Ordered so there's a usable thing early and the risky part (the shim) is proven 
 - **M5 — Distribution hardening.** `install.ps1` + `SHA256SUMS.txt` + `release.yml`, ported test-install
   suite, first-run PATH/shim wiring on install.
 - **Later.** `enforce` bindings; shell-activation convenience; macOS/Linux heads; version *installation*
-  backends; central-config sync; signing + WinGet.
+  backends; central-config sync; **dependent / global bins (5.5) and stamp-based auto-reshim (5.6)**;
+  signing + WinGet.
 
 ---
 
@@ -372,6 +453,13 @@ Ordered so there's a usable thing early and the risky part (the shim) is proven 
 5. **Exposed-binary discovery.** On `tack register`, auto-detect a version's executables (scan `binDir`)
    or require `--exposes`? Recommend auto-detect with an override flag.
 6. **Naming of the three exes on disk** — `tack.exe`, `tack-ui.exe`, `tack-shim.exe` proposed. Fine?
+7. **Per-version npm global prefix policy (5.5).** Reflect-only (scope globals just when the prefix is
+   already per-version) vs opt-in configuring a per-version prefix. Recommend reflect-only for v1.x to stay
+   on the "dispatch, don't manage" side.
+8. **Auto-reshim trigger (5.6).** stamp/mtime poll-on-use (recommended) vs arg-sniffing vs background
+   watcher; and whether it defaults on or off (recommend a config toggle, on once global-bins land).
+9. **Global-bin precedence.** When a global-package bin name collides with a separately-registered tool
+   (e.g. `yarn` as a node global *and* its own registration), which wins? `tack info` must explain it.
 
 ---
 
