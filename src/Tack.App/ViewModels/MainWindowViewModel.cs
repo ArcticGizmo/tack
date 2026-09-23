@@ -20,8 +20,19 @@ public sealed class MainWindowViewModel : ViewModelBase
         Path = new PathViewModel(services);
         Shims = new ShimsViewModel(services);
 
+        SelectCommand = new RelayCommand<string>(s =>
+        {
+            if (int.TryParse(s, out var i)) SelectedTabIndex = i;
+        });
+
         Dashboard.Refresh(); // land on a populated dashboard
     }
+
+    /// <summary>Nav-rail selection: each rail button passes its index as CommandParameter.</summary>
+    public RelayCommand<string> SelectCommand { get; }
+
+    /// <summary>True under a dev build - the rail shows a "(Dev)" flag so the isolated data space is obvious.</summary>
+    public bool IsDev => Tack.Core.TackProfile.IsDev;
 
     public DashboardViewModel Dashboard { get; }
     public InspectorViewModel Inspector { get; }

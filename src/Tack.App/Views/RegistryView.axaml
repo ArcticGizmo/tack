@@ -3,69 +3,69 @@
              xmlns:vm="using:Tack.App.ViewModels"
              x:Class="Tack.App.Views.RegistryView"
              x:DataType="vm:RegistryViewModel">
-  <DockPanel Margin="18">
+  <Grid Margin="28,24" RowDefinitions="Auto,*,Auto" RowSpacing="16">
 
-    <StackPanel DockPanel.Dock="Top" Spacing="6">
-      <TextBlock Text="Registry" FontSize="22" FontWeight="Bold" />
-      <TextBlock Text="Register existing tool installs so tack can dispatch to them. Each change saves config and reshims."
-                 Opacity="0.7" TextWrapping="Wrap" />
-      <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-        <Button Content="Set as default" Command="{Binding SetDefaultCommand}" />
-        <Button Content="Remove" Command="{Binding RemoveCommand}" />
-        <Button Content="Refresh" Command="{Binding RefreshCommand}" />
-      </StackPanel>
+    <StackPanel Grid.Row="0" Spacing="4">
+      <TextBlock Classes="pagetitle" Text="Registry" />
+      <TextBlock Classes="help"
+                 Text="Register existing tool installs so tack can dispatch to them. Every change saves config and reshims." />
     </StackPanel>
 
-    <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6"
-            Padding="14" Margin="0,12,0,0">
-      <StackPanel Spacing="8">
-        <TextBlock Text="Register an install" FontWeight="Bold" Opacity="0.75" />
-        <Grid ColumnDefinitions="Auto,1.2*,Auto,1*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
-          <TextBlock Grid.Row="0" Grid.Column="0" Text="Tool" VerticalAlignment="Center" />
-          <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding NewTool}" PlaceholderText="node" />
-          <TextBlock Grid.Row="0" Grid.Column="2" Text="Version" VerticalAlignment="Center" />
-          <TextBox   Grid.Row="0" Grid.Column="3" Text="{Binding NewVersion}" PlaceholderText="20.11.0" />
+    <Border Grid.Row="1" Classes="card" Padding="20,14">
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8" Margin="0,0,0,10">
+          <TextBlock Grid.Column="0" Classes="phead" Text="REGISTERED VERSIONS" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="secondary" Content="Set default" Padding="12,6" FontSize="12" Command="{Binding SetDefaultCommand}" />
+          <Button Grid.Column="2" Classes="danger" Content="Remove" Padding="12,6" FontSize="12" Command="{Binding RemoveCommand}" />
+          <Button Grid.Column="3" Classes="secondary" Content="Refresh" Padding="12,6" FontSize="12" Command="{Binding RefreshCommand}" />
         </Grid>
-        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-          <TextBlock Grid.Column="0" Text="binDir" VerticalAlignment="Center" />
-          <TextBox   Grid.Column="1" Text="{Binding NewBinDir}" PlaceholderText="C:\tools\node-v20" />
-          <Button    Grid.Column="2" Content="Browse..." Command="{Binding BrowseBinDirCommand}" />
+
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="1.2*,1*,0.8*,2.4*,2*" Margin="10,0,10,6">
+          <TextBlock Grid.Column="0" Classes="phead" Text="TOOL" />
+          <TextBlock Grid.Column="1" Classes="phead" Text="VERSION" />
+          <TextBlock Grid.Column="2" Classes="phead" Text="DEFAULT" />
+          <TextBlock Grid.Column="3" Classes="phead" Text="BINDIR" />
+          <TextBlock Grid.Column="4" Classes="phead" Text="EXPOSES" />
         </Grid>
-        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
-          <TextBlock Grid.Column="0" Text="exposes" VerticalAlignment="Center" />
-          <TextBox   Grid.Column="1" Text="{Binding NewExposes}" PlaceholderText="node, npm, npx (blank = auto-detect)" />
-          <Button    Grid.Column="2" Content="Detect" Command="{Binding DetectExposesCommand}" />
-          <Button    Grid.Column="3" Content="Register" Command="{Binding RegisterCommand}"
-                     Classes="accent" />
-        </Grid>
-        <TextBlock Text="{Binding Status}" Opacity="0.85" TextWrapping="Wrap" />
-      </StackPanel>
+
+        <ListBox Classes="rows" ItemsSource="{Binding Versions}" SelectedItem="{Binding Selected}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ToolVersionRow">
+              <Grid ColumnDefinitions="1.2*,1*,0.8*,2.4*,2*">
+                <TextBlock Grid.Column="0" Text="{Binding Tool}" Classes="field" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="1" Text="{Binding Version}" Classes="field" />
+                <TextBlock Grid.Column="2" Text="{Binding DefaultMark}" Foreground="{DynamicResource OkBrush}" FontSize="13" />
+                <TextBlock Grid.Column="3" Text="{Binding BinDir}" Foreground="{Binding BinDirBrush}" Classes="mono" TextWrapping="Wrap" />
+                <TextBlock Grid.Column="4" Text="{Binding Exposes}" Classes="help" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
     </Border>
 
-    <DockPanel>
-      <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderBrush}" Padding="0,8,0,6" Margin="0,8,0,0">
-        <Grid ColumnDefinitions="1.2*,1*,0.8*,2.4*,2*">
-          <TextBlock Grid.Column="0" Text="TOOL" FontWeight="Bold" FontSize="11" Opacity="0.6" />
-          <TextBlock Grid.Column="1" Text="VERSION" FontWeight="Bold" FontSize="11" Opacity="0.6" />
-          <TextBlock Grid.Column="2" Text="DEFAULT" FontWeight="Bold" FontSize="11" Opacity="0.6" />
-          <TextBlock Grid.Column="3" Text="BINDIR" FontWeight="Bold" FontSize="11" Opacity="0.6" />
-          <TextBlock Grid.Column="4" Text="EXPOSES" FontWeight="Bold" FontSize="11" Opacity="0.6" />
+    <Border Grid.Row="2" Classes="card">
+      <StackPanel Spacing="12">
+        <TextBlock Classes="phead" Text="REGISTER AN INSTALL" />
+        <Grid ColumnDefinitions="Auto,1.2*,Auto,1*" ColumnSpacing="8">
+          <TextBlock Grid.Column="0" Classes="field" Text="Tool" VerticalAlignment="Center" />
+          <TextBox   Grid.Column="1" Text="{Binding NewTool}" PlaceholderText="node" />
+          <TextBlock Grid.Column="2" Classes="field" Text="Version" VerticalAlignment="Center" />
+          <TextBox   Grid.Column="3" Text="{Binding NewVersion}" PlaceholderText="20.11.0" />
         </Grid>
-      </Border>
-      <ListBox ItemsSource="{Binding Versions}" SelectedItem="{Binding Selected}" Background="Transparent">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:ToolVersionRow">
-            <Grid ColumnDefinitions="1.2*,1*,0.8*,2.4*,2*">
-              <TextBlock Grid.Column="0" Text="{Binding Tool}" FontWeight="SemiBold" />
-              <TextBlock Grid.Column="1" Text="{Binding Version}" />
-              <TextBlock Grid.Column="2" Text="{Binding DefaultMark}" Foreground="{DynamicResource OkBrush}" />
-              <TextBlock Grid.Column="3" Text="{Binding BinDir}" Foreground="{Binding BinDirBrush}"
-                         FontFamily="Cascadia Code,Consolas,monospace" FontSize="12" TextWrapping="Wrap" />
-              <TextBlock Grid.Column="4" Text="{Binding Exposes}" Opacity="0.8" TextWrapping="Wrap" />
-            </Grid>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
-    </DockPanel>
-  </DockPanel>
+        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+          <TextBlock Grid.Column="0" Classes="field" Text="binDir" VerticalAlignment="Center" />
+          <TextBox   Grid.Column="1" Text="{Binding NewBinDir}" PlaceholderText="C:\tools\node-v20" />
+          <Button    Grid.Column="2" Classes="secondary" Content="Browse..." Command="{Binding BrowseBinDirCommand}" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+          <TextBlock Grid.Column="0" Classes="field" Text="exposes" VerticalAlignment="Center" />
+          <TextBox   Grid.Column="1" Text="{Binding NewExposes}" PlaceholderText="node, npm, npx (blank = auto-detect)" />
+          <Button    Grid.Column="2" Classes="secondary" Content="Detect" Command="{Binding DetectExposesCommand}" />
+          <Button    Grid.Column="3" Classes="primary" Content="Register" Command="{Binding RegisterCommand}" />
+        </Grid>
+        <TextBlock Classes="status muted" FontSize="13" TextWrapping="Wrap" Text="{Binding Status}" />
+      </StackPanel>
+    </Border>
+  </Grid>
 </UserControl>

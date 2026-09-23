@@ -3,46 +3,52 @@
              xmlns:vm="using:Tack.App.ViewModels"
              x:Class="Tack.App.Views.PathView"
              x:DataType="vm:PathViewModel">
-  <DockPanel Margin="18">
+  <Grid Margin="28,24" RowDefinitions="Auto,*,*" RowSpacing="16">
 
-    <StackPanel DockPanel.Dock="Top" Spacing="8">
-      <TextBlock Text="PATH doctor" FontSize="22" FontWeight="Bold" />
-      <TextBlock Text="Is the shims dir on PATH and ahead of anything that would shadow it? Read-only - PATH is wired at install time."
-                 Opacity="0.7" TextWrapping="Wrap" />
+    <StackPanel Grid.Row="0" Spacing="10">
+      <TextBlock Classes="pagetitle" Text="PATH doctor" />
+      <TextBlock Classes="help"
+                 Text="Is the shims dir on PATH and ahead of anything that would shadow it? Read-only - PATH is wired at install time." />
       <StackPanel Orientation="Horizontal" Spacing="12">
-        <TextBlock Text="{Binding Summary}" FontWeight="SemiBold" VerticalAlignment="Center" />
-        <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+        <TextBlock Classes="status" Classes.ok="{Binding Healthy}" Classes.warn="{Binding !Healthy}"
+                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Text="{Binding Summary}" />
+        <Button Classes="secondary" Content="Refresh" Command="{Binding RefreshCommand}" />
       </StackPanel>
     </StackPanel>
 
-    <Grid RowDefinitions="Auto,*,Auto,*" Margin="0,12,0,0">
-      <TextBlock Grid.Row="0" Text="Checks" FontWeight="Bold" Opacity="0.7" Margin="0,0,0,4" />
-      <ListBox Grid.Row="1" ItemsSource="{Binding Checks}" Background="Transparent">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:DoctorRow">
-            <Grid ColumnDefinitions="60,2*,4*" ColumnSpacing="8">
-              <TextBlock Grid.Column="0" Text="{Binding Glyph}" Foreground="{Binding StatusBrush}" FontWeight="Bold" />
-              <TextBlock Grid.Column="1" Text="{Binding Title}" />
-              <TextBlock Grid.Column="2" Text="{Binding Detail}" Opacity="0.7"
-                         FontFamily="Cascadia Code,Consolas,monospace" FontSize="12" TextWrapping="Wrap" />
-            </Grid>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
+    <Border Grid.Row="1" Classes="card" Padding="20,14">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Classes="phead" Text="CHECKS" Margin="0,0,0,8" />
+        <ListBox Classes="rows" ItemsSource="{Binding Checks}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:DoctorRow">
+              <Grid ColumnDefinitions="60,2*,4*" ColumnSpacing="10">
+                <TextBlock Grid.Column="0" Text="{Binding Glyph}" Foreground="{Binding StatusBrush}" FontWeight="Bold" />
+                <TextBlock Grid.Column="1" Text="{Binding Title}" Classes="field" />
+                <TextBlock Grid.Column="2" Text="{Binding Detail}" Classes="mono" TextWrapping="Wrap" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
 
-      <TextBlock Grid.Row="2" Text="Effective PATH (machine, then user)" FontWeight="Bold" Opacity="0.7" Margin="0,10,0,4" />
-      <ListBox Grid.Row="3" ItemsSource="{Binding PathEntries}" Background="Transparent">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:PathEntryRow">
-            <Grid ColumnDefinitions="36,*,Auto" ColumnSpacing="8">
-              <TextBlock Grid.Column="0" Text="{Binding Order}" Opacity="0.5" />
-              <TextBlock Grid.Column="1" Text="{Binding Path}" Foreground="{Binding Brush}" FontWeight="{Binding Weight}"
-                         FontFamily="Cascadia Code,Consolas,monospace" FontSize="12" TextWrapping="Wrap" />
-              <TextBlock Grid.Column="2" Text="{Binding Note}" Foreground="{DynamicResource WarnBrush}" FontSize="12" />
-            </Grid>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
-    </Grid>
-  </DockPanel>
+    <Border Grid.Row="2" Classes="card" Padding="20,14">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Classes="phead" Text="EFFECTIVE PATH (MACHINE, THEN USER)" Margin="0,0,0,8" />
+        <ListBox Classes="rows" ItemsSource="{Binding PathEntries}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:PathEntryRow">
+              <Grid ColumnDefinitions="36,*,Auto" ColumnSpacing="10">
+                <TextBlock Grid.Column="0" Text="{Binding Order}" Classes="help" />
+                <TextBlock Grid.Column="1" Text="{Binding Path}" Foreground="{Binding Brush}" FontWeight="{Binding Weight}"
+                           FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" TextWrapping="Wrap" />
+                <TextBlock Grid.Column="2" Text="{Binding Note}" Foreground="{DynamicResource WarnBrush}" FontSize="12" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+  </Grid>
 </UserControl>

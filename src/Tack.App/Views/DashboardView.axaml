@@ -3,50 +3,54 @@
              xmlns:vm="using:Tack.App.ViewModels"
              x:Class="Tack.App.Views.DashboardView"
              x:DataType="vm:DashboardViewModel">
-  <DockPanel Margin="18">
+  <Grid Margin="28,24" RowDefinitions="Auto,Auto,*" RowSpacing="16">
 
-    <StackPanel DockPanel.Dock="Top" Spacing="10">
-      <TextBlock Text="Dashboard" FontSize="22" FontWeight="Bold" />
-      <TextBlock Text="How every registered tool resolves for a directory - the shim's answer, wherever the process was launched."
-                 Opacity="0.7" TextWrapping="Wrap" />
-
-      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
-        <TextBlock Grid.Column="0" Text="Directory" VerticalAlignment="Center" />
-        <TextBox Grid.Column="1" Text="{Binding Directory}" />
-        <Button Grid.Column="2" Content="Browse..." Command="{Binding BrowseCommand}" />
-        <Button Grid.Column="3" Content="Use current" Command="{Binding UseCurrentCommand}" />
-        <Button Grid.Column="4" Content="Refresh" Command="{Binding RefreshCommand}" />
-      </Grid>
-
-      <StackPanel Orientation="Horizontal" Spacing="16">
-        <TextBlock Text="{Binding Summary}" Opacity="0.85" />
-        <TextBlock Text="{Binding ShimsStatus}" FontWeight="SemiBold" />
-      </StackPanel>
-
-      <Border BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderBrush}" Padding="0,6,0,6" Margin="0,4,0,0">
-        <Grid ColumnDefinitions="1.4*,1.4*,1.2*,2*,3*">
-          <TextBlock Grid.Column="0" Text="TOOL" FontWeight="Bold" FontSize="11" Opacity="0.6" />
-          <TextBlock Grid.Column="1" Text="RESOLVES TO" FontWeight="Bold" FontSize="11" Opacity="0.6" />
-          <TextBlock Grid.Column="2" Text="SOURCE" FontWeight="Bold" FontSize="11" Opacity="0.6" />
-          <TextBlock Grid.Column="3" Text="WHY" FontWeight="Bold" FontSize="11" Opacity="0.6" />
-          <TextBlock Grid.Column="4" Text="BINARY" FontWeight="Bold" FontSize="11" Opacity="0.6" />
-        </Grid>
-      </Border>
+    <StackPanel Grid.Row="0" Spacing="4">
+      <TextBlock Classes="pagetitle" Text="Dashboard" />
+      <TextBlock Classes="help"
+                 Text="How every registered tool resolves for a directory - the shim's answer, wherever the process was launched." />
     </StackPanel>
 
-    <ListBox ItemsSource="{Binding Rows}" Margin="0,4,0,0" Background="Transparent">
-      <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="vm:ResolutionRow">
-          <Grid ColumnDefinitions="1.4*,1.4*,1.2*,2*,3*">
-            <TextBlock Grid.Column="0" Text="{Binding Tool}" FontWeight="SemiBold" />
-            <TextBlock Grid.Column="1" Text="{Binding Version}" />
-            <TextBlock Grid.Column="2" Text="{Binding SourceLabel}" Foreground="{Binding SourceBrush}" />
-            <TextBlock Grid.Column="3" Text="{Binding Why}" Opacity="0.75" TextWrapping="Wrap" />
-            <TextBlock Grid.Column="4" Text="{Binding Binary}" FontFamily="Cascadia Code,Consolas,monospace"
-                       FontSize="12" Opacity="0.85" TextWrapping="Wrap" />
-          </Grid>
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
-  </DockPanel>
+    <Border Grid.Row="1" Classes="card">
+      <StackPanel Spacing="12">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
+          <TextBlock Grid.Column="0" Classes="field" Text="Directory" VerticalAlignment="Center" />
+          <TextBox Grid.Column="1" Text="{Binding Directory}" />
+          <Button Grid.Column="2" Classes="secondary" Content="Browse..." Command="{Binding BrowseCommand}" />
+          <Button Grid.Column="3" Classes="secondary" Content="Use current" Command="{Binding UseCurrentCommand}" />
+          <Button Grid.Column="4" Classes="primary" Content="Refresh" Command="{Binding RefreshCommand}" />
+        </Grid>
+        <StackPanel Orientation="Horizontal" Spacing="16">
+          <TextBlock Classes="help" VerticalAlignment="Center" Text="{Binding Summary}" />
+          <TextBlock Classes="status" Classes.ok="{Binding ShimsOnPath}" Classes.warn="{Binding !ShimsOnPath}"
+                     FontSize="13" FontWeight="SemiBold" Text="{Binding ShimsStatus}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="2" Classes="card" Padding="20,14">
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="1.4*,1.4*,1.2*,2*,3*" Margin="10,0,10,8">
+          <TextBlock Grid.Column="0" Classes="phead" Text="TOOL" />
+          <TextBlock Grid.Column="1" Classes="phead" Text="RESOLVES TO" />
+          <TextBlock Grid.Column="2" Classes="phead" Text="SOURCE" />
+          <TextBlock Grid.Column="3" Classes="phead" Text="WHY" />
+          <TextBlock Grid.Column="4" Classes="phead" Text="BINARY" />
+        </Grid>
+        <ListBox Classes="rows" ItemsSource="{Binding Rows}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ResolutionRow">
+              <Grid ColumnDefinitions="1.4*,1.4*,1.2*,2*,3*">
+                <TextBlock Grid.Column="0" Text="{Binding Tool}" Classes="field" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="1" Text="{Binding Version}" Classes="field" />
+                <TextBlock Grid.Column="2" Text="{Binding SourceLabel}" Foreground="{Binding SourceBrush}" FontSize="13" />
+                <TextBlock Grid.Column="3" Text="{Binding Why}" Classes="help" />
+                <TextBlock Grid.Column="4" Text="{Binding Binary}" Classes="mono" TextWrapping="Wrap" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+  </Grid>
 </UserControl>

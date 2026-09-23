@@ -4,5 +4,6 @@
              RequestedThemeVariant="Dark">
   <Application.Styles>
     <FluentTheme />
+    <StyleInclude Source="avares://tack-ui/Styles/Common.axaml" />
   </Application.Styles>
 </Application>

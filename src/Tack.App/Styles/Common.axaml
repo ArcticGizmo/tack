@@ -1,0 +1,138 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- Shared page furniture, following emuwren's look: a card on a darker page for depth, small-caps
+       section headings, help text, field labels, and primary/secondary/danger buttons. Kept here so a
+       change lands across every view at once.
+
+       Brushes are referenced with DynamicResource, not StaticResource: this file is included from
+       Application.Styles, which is evaluated before the Nord palette is published into
+       Application.Resources (ThemeManager.Initialize runs at framework-init) - a static lookup would run
+       before the brushes exist. -->
+
+  <!-- The card: the lighter PanelBg surface floating above the darker FormBg page. -->
+  <Style Selector="Border.card">
+    <Setter Property="Background" Value="{DynamicResource PanelBgBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="Padding" Value="20,18" />
+  </Style>
+
+  <!-- A slightly inset sub-panel used for inline forms inside a card. -->
+  <Style Selector="Border.subcard">
+    <Setter Property="Background" Value="{DynamicResource FormBgBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="16,14" />
+  </Style>
+
+  <Style Selector="TextBlock.pagetitle">
+    <Setter Property="FontSize" Value="22" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource TitleBrush}" />
+  </Style>
+
+  <!-- Small-caps section heading (a card's title, a column-group label). -->
+  <Style Selector="TextBlock.phead">
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="LetterSpacing" Value="1.3" />
+    <Setter Property="Foreground" Value="{DynamicResource FaintBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.help">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource FaintBrush}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <Style Selector="TextBlock.field">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Foreground" Value="{DynamicResource FgBrush}" />
+  </Style>
+
+  <!-- :is() rather than a bare type selector so SelectableTextBlock (a TextBlock subclass) matches too -
+       anything a user might copy (a path, a resolved binary) is selectable. -->
+  <Style Selector=":is(TextBlock).mono">
+    <Setter Property="FontFamily" Value="Cascadia Code, Consolas, monospace" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource FgBrush}" />
+  </Style>
+
+  <!-- Buttons: .primary is the accented call to action, .secondary the neutral one, .danger destructive. -->
+  <Style Selector="Button.primary">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Foreground" Value="#2E3440" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Padding" Value="14,8" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <Style Selector="Button.secondary">
+    <Setter Property="Background" Value="{DynamicResource ButtonBgBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource FgBrush}" />
+    <Setter Property="Padding" Value="14,8" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <Style Selector="Button.danger">
+    <Setter Property="Background" Value="{DynamicResource ButtonBgBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+    <Setter Property="Padding" Value="14,8" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+
+  <!-- List rows: comfortable padding + rounded selection, so a table doesn't read as a dense grid. -->
+  <Style Selector="ListBox.rows">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <Style Selector="ListBox.rows ListBoxItem">
+    <Setter Property="Padding" Value="10,8" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Margin" Value="0,1" />
+  </Style>
+
+  <!-- Status text colouring, driven by a bound class. :is() so error text stays copyable. -->
+  <Style Selector=":is(TextBlock).status.ok"><Setter Property="Foreground" Value="{DynamicResource OkBrush}" /></Style>
+  <Style Selector=":is(TextBlock).status.warn"><Setter Property="Foreground" Value="{DynamicResource WarnBrush}" /></Style>
+  <Style Selector=":is(TextBlock).status.err"><Setter Property="Foreground" Value="{DynamicResource DangerBrush}" /></Style>
+  <Style Selector=":is(TextBlock).status.muted"><Setter Property="Foreground" Value="{DynamicResource FaintBrush}" /></Style>
+
+  <!-- Left-nav items: chromeless buttons whose inner Border carries hover + active state. -->
+  <Style Selector="Button.nav">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Margin" Value="0,1" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <Style Selector="Button.nav /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.nav:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.nav:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Border.navitem">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="12,9" />
+  </Style>
+  <Style Selector="Button.nav:pointerover Border.navitem">
+    <Setter Property="Background" Value="{DynamicResource ButtonBgBrush}" />
+  </Style>
+  <Style Selector="Border.navitem.active">
+    <Setter Property="Background" Value="#3388C0D0" />
+  </Style>
+  <Style Selector="Border.navitem.active > TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource TitleBrush}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+</Styles>
