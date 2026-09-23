@@ -1,40 +1,44 @@
-using System.Diagnostics;
 using System.Reflection;
+using Spectre.Console.Cli;
+using Tack.Cli.Commands;
 using Velopack;
 
-// tack CLI (M0 skeleton).
+// tack CLI.
 //
-// Velopack bootstrap runs first in every shipped exe EXCEPT the tiny hot-path shim (which must stay minimal
-// and fast). On a normal run this is a no-op and returns immediately; when Velopack invokes tack with its
-// own hook args, it handles them and exits.
+// Velopack bootstrap runs first in every shipped exe EXCEPT the tiny hot-path shim. On a normal run it's a
+// no-op; when Velopack invokes tack with its own hook args it handles them and exits. Then a Spectre.Console
+// command app dispatches. Every command is a thin shell over Tack.Core (Core decides; the CLI formats).
 VelopackApp.Build().Run();
 
-string version = ResolveVersion();
-string cmd = args.Length > 0 ? args[0] : "";
-
-switch (cmd)
+var app = new CommandApp();
+app.Configure(cfg =>
 {
-    case "--version":
-    case "-v":
-    case "version":
-        Console.WriteLine($"tack {version}");
-        return 0;
+    cfg.SetApplicationName("tack");
+    cfg.SetApplicationVersion(ResolveVersion());
 
-    case "open":
-    case "ui":
-        return LaunchUi();
+    cfg.AddCommand<InfoCommand>("info")
+        .WithDescription("Show the resolved version and source for a tool in this directory.");
+    cfg.AddCommand<WhichCommand>("which")
+        .WithDescription("Print the absolute path a tool resolves to (scriptable).");
+    cfg.AddCommand<ListCommand>("list").WithAlias("ls")
+        .WithDescription("List registered tools and versions.");
+    cfg.AddCommand<ShimsCommand>("shims")
+        .WithDescription("List generated shims and PATH health.");
+    cfg.AddCommand<DoctorCommand>("doctor")
+        .WithDescription("Diagnose PATH and shim health.");
+    cfg.AddCommand<RegisterCommand>("register")
+        .WithDescription("Register an existing tool install in the central registry.");
+    cfg.AddCommand<BindCommand>("bind")
+        .WithDescription("Add a central directory binding (managed without a repo tack.yml).");
+    cfg.AddCommand<UseCommand>("use")
+        .WithDescription("Pin a tool version in this directory (writes tack.yml).");
+    cfg.AddCommand<ReshimCommand>("reshim")
+        .WithDescription("Recompile central config and regenerate the shims.");
+    cfg.AddCommand<OpenCommand>("open").WithAlias("ui")
+        .WithDescription("Launch the tack desktop UI.");
+});
 
-    case "":
-        Console.WriteLine($"tack {version}");
-        Console.WriteLine("usage: tack <command>");
-        Console.WriteLine("  M0 skeleton knows: --version, open");
-        Console.WriteLine("  the full CLI (info/which/list/use/register/bind/reshim/doctor/shims) is M3");
-        return 0;
-
-    default:
-        Console.Error.WriteLine($"tack: unknown command '{cmd}' (M0 skeleton knows only --version, open)");
-        return 2;
-}
+return app.Run(args);
 
 static string ResolveVersion()
 {
@@ -42,28 +46,6 @@ static string ResolveVersion()
     string v = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
         ?? asm.GetName().Version?.ToString()
         ?? "0.0.0";
-    int plus = v.IndexOf('+'); // strip any +<metadata> defensively
+    int plus = v.IndexOf('+');
     return plus >= 0 ? v[..plus] : v;
-}
-
-// `tack open` launches tack-ui.exe (the Avalonia head) from the same install dir. Console app -> UI, so
-// UseShellExecute detaches it without tying it to this process's console.
-static int LaunchUi()
-{
-    string ui = Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "tack-ui.exe" : "tack-ui");
-    if (!File.Exists(ui))
-    {
-        Console.Error.WriteLine($"tack: tack-ui not found next to tack ({ui}).");
-        return 1;
-    }
-    try
-    {
-        Process.Start(new ProcessStartInfo(ui) { UseShellExecute = true });
-        return 0;
-    }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine($"tack: could not launch the UI: {ex.Message}");
-        return 1;
-    }
 }
