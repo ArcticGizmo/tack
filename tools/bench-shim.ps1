@@ -41,6 +41,8 @@ New-Item -ItemType Directory -Path $work -Force | Out-Null
 
 try {
     Copy-Item (Join-Path $ShimDir 'tack-shim.*') $work
+    # Framework-dependent builds need the Tack.Core dependency beside the host; the AOT single-file has none.
+    if (Test-Path (Join-Path $ShimDir 'Tack.Core.dll')) { Copy-Item (Join-Path $ShimDir 'Tack.Core.*') $work }
     $nodeExe  = Join-Path $work 'node.exe'    # registered -> full proxy path
     $ghostExe = Join-Path $work 'ghost.exe'   # unregistered -> fast-fail, no child spawn
     Copy-Item (Join-Path $work 'tack-shim.exe') $nodeExe

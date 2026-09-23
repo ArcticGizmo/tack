@@ -20,4 +20,10 @@
     <StackTraceSupport>false</StackTraceSupport>
     <OptimizationPreference>Size</OptimizationPreference>
   </PropertyGroup>
+
+  <!-- The shim is a thin front-end over the resolver: Tack.Core must stay AOT-safe (no YamlDotNet, which
+       lives only in the CLI). -->
+  <ItemGroup>
+    <ProjectReference Include="..\Tack.Core\Tack.Core.csproj" />
+  </ItemGroup>
 </Project>
