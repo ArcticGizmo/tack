@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Tack.App.ViewModels"
+             x:Class="Tack.App.Views.PathView"
+             x:DataType="vm:PathViewModel">
+  <Grid Margin="28,24" RowDefinitions="Auto,*,*" RowSpacing="16">
+
+    <StackPanel Grid.Row="0" Spacing="10">
+      <TextBlock Classes="pagetitle" Text="PATH doctor" />
+      <TextBlock Classes="help"
+                 Text="Is the shims dir on PATH and ahead of anything that would shadow it? Read-only - PATH is wired at install time." />
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <TextBlock Classes="status" Classes.ok="{Binding Healthy}" Classes.warn="{Binding !Healthy}"
+                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Text="{Binding Summary}" />
+        <Button Classes="secondary" Content="Refresh" Command="{Binding RefreshCommand}" />
+      </StackPanel>
+    </StackPanel>
+
+    <Border Grid.Row="1" Classes="card" Padding="20,14">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Classes="phead" Text="CHECKS" Margin="0,0,0,8" />
+        <ListBox Classes="rows" ItemsSource="{Binding Checks}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:DoctorRow">
+              <Grid ColumnDefinitions="60,2*,4*" ColumnSpacing="10">
+                <TextBlock Grid.Column="0" Text="{Binding Glyph}" Foreground="{Binding StatusBrush}" FontWeight="Bold" />
+                <TextBlock Grid.Column="1" Text="{Binding Title}" Classes="field" />
+                <TextBlock Grid.Column="2" Text="{Binding Detail}" Classes="mono" TextWrapping="Wrap" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+
+    <Border Grid.Row="2" Classes="card" Padding="20,14">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Classes="phead" Text="EFFECTIVE PATH (MACHINE, THEN USER)" Margin="0,0,0,8" />
+        <ListBox Classes="rows" ItemsSource="{Binding PathEntries}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:PathEntryRow">
+              <Grid ColumnDefinitions="36,*,Auto" ColumnSpacing="10">
+                <TextBlock Grid.Column="0" Text="{Binding Order}" Classes="help" />
+                <TextBlock Grid.Column="1" Text="{Binding Path}" Foreground="{Binding Brush}" FontWeight="{Binding Weight}"
+                           FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" TextWrapping="Wrap" />
+                <TextBlock Grid.Column="2" Text="{Binding Note}" Foreground="{DynamicResource WarnBrush}" FontSize="12" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+  </Grid>
+</UserControl>

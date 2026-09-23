@@ -1,0 +1,20 @@
+root = true
+
+# Source is UTF-8 with BOM (mirrors perch): the .NET toolchain is happy, and it keeps C# files distinct
+# from the release-pipeline scripts below, which must stay BOM-free.
+[*.{cs,csproj,props,targets,slnx,axaml,xaml}]
+charset = utf-8-bom
+indent_style = space
+indent_size = 4
+
+# Release-pipeline scripts and docs: UTF-8, NO BOM, and held to pure ASCII by tools/test-install.ps1.
+# The reason is load-bearing - Windows PowerShell 5.1 decodes a BOM-less file as the system codepage, and a
+# stray non-ASCII character (e.g. a UTF-8 em dash) then mis-parses as a string delimiter. See install.ps1.
+[*.{ps1,psm1,bat,cmd,sh,yml,yaml,md,json}]
+charset = utf-8
+indent_style = space
+indent_size = 2
+
+# Shell scripts must be LF (they run on macOS/Linux CI runners and via bash).
+[*.sh]
+end_of_line = lf

@@ -1,0 +1,30 @@
+<Project>
+  <!--
+    Shared build settings + binary metadata for every tack project. This is a DELIBERATE deviation from
+    perch (which sets almost no metadata): tack copies one shim exe under real tool names (node.exe, ...)
+    onto PATH, so honest, complete Win32 version metadata (Company/Product/Description/Version) is a
+    deliberate anti-false-positive measure - a copied node.exe then identifies as tack rather than looking
+    like an anonymous unsigned binary impersonating Node. See docs/m1-spike-findings.md and the memory note
+    on signing/metadata. `Version` here is the single source of truth that publish.bat / release.yml read.
+
+    Owner/URL below assumes the same GitHub owner as perch (ArcticGizmo) - CONFIRM before first release
+    (scope plan open decision 3); it also feeds install.ps1's default TACK_REPO.
+  -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <Version>0.1.0</Version>
+    <Product>tack</Product>
+    <Company>ArcticGizmo</Company>
+    <Authors>ArcticGizmo</Authors>
+    <Description>tack - per-directory tool-version dispatcher for Windows (shim-based).</Description>
+    <Copyright>Copyright (c) 2026 ArcticGizmo</Copyright>
+    <RepositoryUrl>https://github.com/ArcticGizmo/tack</RepositoryUrl>
+
+    <!-- Clean version output: no trailing git-sha suffix on the informational version. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Tack.App.ViewModels"
+             x:Class="Tack.App.Views.RegistryView"
+             x:DataType="vm:RegistryViewModel">
+  <Grid Margin="28,24" RowDefinitions="Auto,*,Auto" RowSpacing="16">
+
+    <StackPanel Grid.Row="0" Spacing="4">
+      <TextBlock Classes="pagetitle" Text="Registry" />
+      <TextBlock Classes="help"
+                 Text="Register existing tool installs so tack can dispatch to them. Every change saves config and reshims." />
+    </StackPanel>
+
+    <Border Grid.Row="1" Classes="card" Padding="20,14">
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8" Margin="0,0,0,10">
+          <TextBlock Grid.Column="0" Classes="phead" Text="REGISTERED VERSIONS" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="secondary" Content="Set default" Padding="12,6" FontSize="12" Command="{Binding SetDefaultCommand}" />
+          <Button Grid.Column="2" Classes="danger" Content="Remove" Padding="12,6" FontSize="12" Command="{Binding RemoveCommand}" />
+          <Button Grid.Column="3" Classes="secondary" Content="Refresh" Padding="12,6" FontSize="12" Command="{Binding RefreshCommand}" />
+        </Grid>
+
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="1.2*,1*,0.8*,2.4*,2*" Margin="10,0,10,6">
+          <TextBlock Grid.Column="0" Classes="phead" Text="TOOL" />
+          <TextBlock Grid.Column="1" Classes="phead" Text="VERSION" />
+          <TextBlock Grid.Column="2" Classes="phead" Text="DEFAULT" />
+          <TextBlock Grid.Column="3" Classes="phead" Text="BINDIR" />
+          <TextBlock Grid.Column="4" Classes="phead" Text="EXPOSES" />
+        </Grid>
+
+        <ListBox Classes="rows" ItemsSource="{Binding Versions}" SelectedItem="{Binding Selected}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ToolVersionRow">
+              <Grid ColumnDefinitions="1.2*,1*,0.8*,2.4*,2*">
+                <TextBlock Grid.Column="0" Text="{Binding Tool}" Classes="field" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="1" Text="{Binding Version}" Classes="field" />
+                <TextBlock Grid.Column="2" Text="{Binding DefaultMark}" Foreground="{DynamicResource OkBrush}" FontSize="13" />
+                <TextBlock Grid.Column="3" Text="{Binding BinDir}" Foreground="{Binding BinDirBrush}" Classes="mono" TextWrapping="Wrap" />
+                <TextBlock Grid.Column="4" Text="{Binding Exposes}" Classes="help" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+
+    <Border Grid.Row="2" Classes="card">
+      <StackPanel Spacing="12">
+        <TextBlock Classes="phead" Text="REGISTER AN INSTALL" />
+        <Grid ColumnDefinitions="Auto,1.2*,Auto,1*" ColumnSpacing="8">
+          <TextBlock Grid.Column="0" Classes="field" Text="Tool" VerticalAlignment="Center" />
+          <TextBox   Grid.Column="1" Text="{Binding NewTool}" PlaceholderText="node" />
+          <TextBlock Grid.Column="2" Classes="field" Text="Version" VerticalAlignment="Center" />
+          <TextBox   Grid.Column="3" Text="{Binding NewVersion}" PlaceholderText="20.11.0" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+          <TextBlock Grid.Column="0" Classes="field" Text="binDir" VerticalAlignment="Center" />
+          <TextBox   Grid.Column="1" Text="{Binding NewBinDir}" PlaceholderText="C:\tools\node-v20" />
+          <Button    Grid.Column="2" Classes="secondary" Content="Browse..." Command="{Binding BrowseBinDirCommand}" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+          <TextBlock Grid.Column="0" Classes="field" Text="exposes" VerticalAlignment="Center" />
+          <TextBox   Grid.Column="1" Text="{Binding NewExposes}" PlaceholderText="node, npm, npx (blank = auto-detect)" />
+          <Button    Grid.Column="2" Classes="secondary" Content="Detect" Command="{Binding DetectExposesCommand}" />
+          <Button    Grid.Column="3" Classes="primary" Content="Register" Command="{Binding RegisterCommand}" />
+        </Grid>
+        <TextBlock Classes="status muted" FontSize="13" TextWrapping="Wrap" Text="{Binding Status}" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

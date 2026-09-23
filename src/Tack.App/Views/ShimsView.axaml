@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Tack.App.ViewModels"
+             x:Class="Tack.App.Views.ShimsView"
+             x:DataType="vm:ShimsViewModel">
+  <Grid Margin="28,24" RowDefinitions="Auto,Auto,*" RowSpacing="16">
+
+    <StackPanel Grid.Row="0" Spacing="4">
+      <TextBlock Classes="pagetitle" Text="Shims" />
+      <TextBlock Classes="help"
+                 Text="One proxy exe per exposed binary, sitting on PATH. Reshim regenerates them from the registry." />
+    </StackPanel>
+
+    <Border Grid.Row="1" Classes="card">
+      <StackPanel Spacing="12">
+        <StackPanel Spacing="3">
+          <TextBlock Classes="phead" Text="SHIMS DIRECTORY" />
+          <SelectableTextBlock Text="{Binding ShimsDir}" Classes="mono" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="12">
+          <TextBlock Classes="status muted" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" Text="{Binding Status}" />
+          <Button Classes="primary" Content="Reshim" Command="{Binding ReshimCommand}" />
+          <Button Classes="secondary" Content="Refresh" Command="{Binding RefreshCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="2" Classes="card" Padding="20,14">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Classes="phead" Text="GENERATED SHIMS" Margin="0,0,0,8" />
+        <ListBox Classes="rows" ItemsSource="{Binding Shims}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ShimRow">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Text="{Binding Name}" Foreground="{Binding Brush}" Classes="mono" FontSize="13" />
+                <TextBlock Grid.Column="1" Text="{Binding StaleMark}" Foreground="{DynamicResource WarnBrush}" FontSize="12" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+  </Grid>
+</UserControl>

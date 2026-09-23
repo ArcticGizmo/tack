@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The `tack` command (assembly/exe name `tack`). Console app. The rich Spectre.Console CLI is M3; M0
+       ships just the version command and `tack open` (launch the UI). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Tack.Cli</RootNamespace>
+    <AssemblyName>tack</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Velopack" Version="1.2.0" />
+    <PackageReference Include="Spectre.Console" Version="0.49.1" />
+    <PackageReference Include="Spectre.Console.Cli" Version="0.49.1" />
+    <!-- Full YAML parser for authoring/validating tack.yml. Deliberately lives here, NOT in Tack.Core:
+         YamlDotNet is reflection-based (AOT-hostile), and the shim must never pull it in. A cross-check
+         test asserts this parser and Core's mini-parser agree on the tack.yml subset. -->
+    <PackageReference Include="YamlDotNet" Version="16.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tack.Core\Tack.Core.csproj" />
+  </ItemGroup>
+</Project>

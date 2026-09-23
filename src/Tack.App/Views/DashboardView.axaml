@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Tack.App.ViewModels"
+             x:Class="Tack.App.Views.DashboardView"
+             x:DataType="vm:DashboardViewModel">
+  <Grid Margin="28,24" RowDefinitions="Auto,Auto,*" RowSpacing="16">
+
+    <StackPanel Grid.Row="0" Spacing="4">
+      <TextBlock Classes="pagetitle" Text="Dashboard" />
+      <TextBlock Classes="help"
+                 Text="How every registered tool resolves for a directory - the shim's answer, wherever the process was launched." />
+    </StackPanel>
+
+    <Border Grid.Row="1" Classes="card">
+      <StackPanel Spacing="12">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
+          <TextBlock Grid.Column="0" Classes="field" Text="Directory" VerticalAlignment="Center" />
+          <TextBox Grid.Column="1" Text="{Binding Directory}" />
+          <Button Grid.Column="2" Classes="secondary" Content="Browse..." Command="{Binding BrowseCommand}" />
+          <Button Grid.Column="3" Classes="secondary" Content="Use current" Command="{Binding UseCurrentCommand}" />
+          <Button Grid.Column="4" Classes="primary" Content="Refresh" Command="{Binding RefreshCommand}" />
+        </Grid>
+        <StackPanel Orientation="Horizontal" Spacing="16">
+          <TextBlock Classes="help" VerticalAlignment="Center" Text="{Binding Summary}" />
+          <TextBlock Classes="status" Classes.ok="{Binding ShimsOnPath}" Classes.warn="{Binding !ShimsOnPath}"
+                     FontSize="13" FontWeight="SemiBold" Text="{Binding ShimsStatus}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="2" Classes="card" Padding="20,14">
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="1.4*,1.4*,1.2*,2*,3*" Margin="10,0,10,8">
+          <TextBlock Grid.Column="0" Classes="phead" Text="TOOL" />
+          <TextBlock Grid.Column="1" Classes="phead" Text="RESOLVES TO" />
+          <TextBlock Grid.Column="2" Classes="phead" Text="SOURCE" />
+          <TextBlock Grid.Column="3" Classes="phead" Text="WHY" />
+          <TextBlock Grid.Column="4" Classes="phead" Text="BINARY" />
+        </Grid>
+        <ListBox Classes="rows" ItemsSource="{Binding Rows}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ResolutionRow">
+              <Grid ColumnDefinitions="1.4*,1.4*,1.2*,2*,3*">
+                <TextBlock Grid.Column="0" Text="{Binding Tool}" Classes="field" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="1" Text="{Binding Version}" Classes="field" />
+                <TextBlock Grid.Column="2" Text="{Binding SourceLabel}" Foreground="{Binding SourceBrush}" FontSize="13" />
+                <TextBlock Grid.Column="3" Text="{Binding Why}" Classes="help" />
+                <TextBlock Grid.Column="4" Text="{Binding Binary}" Classes="mono" TextWrapping="Wrap" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+  </Grid>
+</UserControl>

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Integration tests for the M1 shim spike. They run the ACTUAL shim exe (renamed per tool, as in
+    production) against a stub tool and real .cmd files, in temp working dirs, and assert on exit codes,
+    forwarded args, cwd, stdin, and per-directory target selection.
+
+    Both the shim and the stub are ProjectReferenced purely so their build outputs land in this project's
+    bin dir; the tests invoke the produced executables, not the managed API. A plain `dotnet test` builds
+    everything it needs (no separate publish step). AOT is validated separately by bench/run-spike.ps1.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Tack.Shim\Tack.Shim.csproj" />
+    <ProjectReference Include="..\..\src\Tack.StubTool\Tack.StubTool.csproj" />
+  </ItemGroup>
+</Project>
