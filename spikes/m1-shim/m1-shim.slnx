@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Tack.Shim/Tack.Shim.csproj" />
+    <Project Path="src/Tack.StubTool/Tack.StubTool.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Tack.Shim.Tests/Tack.Shim.Tests.csproj" />
+  </Folder>
+</Solution>

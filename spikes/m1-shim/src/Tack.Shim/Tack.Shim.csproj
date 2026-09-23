@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    tack-shim (M1 SPIKE): the tiny NativeAOT proxy copied per shimmed tool. It identifies which tool it
+    is proxying from its own filename (argv[0] basename), resolves the real target binary for the current
+    working directory from a pre-compiled resolved.json, then spawns + faithfully proxies it.
+
+    This runs on EVERY `node`/`npm`/`python` call, so cold-start latency is the whole ballgame — hence
+    NativeAOT (no JIT, no runtime self-extract), source-gen JSON (no reflection), no YAML on the hot path.
+    Mirrors the sibling perch-hook's build shape.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>tack-shim</AssemblyName>
+    <RootNamespace>Tack.Shim</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <StackTraceSupport>false</StackTraceSupport>
+    <OptimizationPreference>Size</OptimizationPreference>
+  </PropertyGroup>
+</Project>
