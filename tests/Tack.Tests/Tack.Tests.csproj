@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Tack.Core\Tack.Core.csproj" />
+    <ProjectReference Include="..\..\src\Tack.Cli\Tack.Cli.csproj" />
     <ProjectReference Include="..\..\src\Tack.Shim\Tack.Shim.csproj" />
     <ProjectReference Include="..\Tack.StubTool\Tack.StubTool.csproj" />
   </ItemGroup>

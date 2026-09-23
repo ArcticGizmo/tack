@@ -11,6 +11,10 @@
 
   <ItemGroup>
     <PackageReference Include="Velopack" Version="1.2.0" />
+    <!-- Full YAML parser for authoring/validating tack.yml. Deliberately lives here, NOT in Tack.Core:
+         YamlDotNet is reflection-based (AOT-hostile), and the shim must never pull it in. A cross-check
+         test asserts this parser and Core's mini-parser agree on the tack.yml subset. -->
+    <PackageReference Include="YamlDotNet" Version="16.2.1" />
   </ItemGroup>
 
   <ItemGroup>
