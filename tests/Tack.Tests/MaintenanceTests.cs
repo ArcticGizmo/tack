@@ -1,3 +1,4 @@
+using Tack.Core;
 using Tack.Core.Config;
 using Tack.Core.Maintenance;
 using Xunit;
@@ -113,6 +114,61 @@ public sealed class ReshimmerTests : IDisposable
         var result = Reshimmer.Run(config, shims, resolved, new ShimPayload { ShimExe = Path.Combine(_root, "nope.exe") });
 
         Assert.True(result.ShimPayloadMissing);
+        Assert.True(File.Exists(resolved));
+        Assert.Equal(0, result.ShimsWritten);
+    }
+}
+
+public sealed class FirstRunTests : IDisposable
+{
+    private readonly string _root = Directory.CreateTempSubdirectory("tack-firstrun-").FullName;
+    public void Dispose() { try { Directory.Delete(_root, true); } catch { } }
+
+    private sealed class FakePathInstaller : IPathInstaller
+    {
+        public int Registered;
+        public int Unregistered;
+        public void Register() => Registered++;
+        public void Unregister() => Unregistered++;
+    }
+
+    private ShimPayload Payload()
+    {
+        string exe = Path.Combine(_root, "tack-shim.exe");
+        File.WriteAllText(exe, "SHIM");
+        return new ShimPayload { ShimExe = exe };
+    }
+
+    [Fact]
+    public void Wires_path_then_regenerates_shims_from_existing_config()
+    {
+        string shims = Path.Combine(_root, "shims");
+        string resolved = Path.Combine(_root, "resolved.json");
+        var path = new FakePathInstaller();
+        var config = new CentralConfig
+        {
+            Tools = { ["node"] = new RegisteredTool { Versions = { ["1"] = new InstalledVersion { BinDir = _root, Exposes = { "node", "npm" } } } } },
+        };
+
+        var result = FirstRun.Apply(path, config, shims, resolved, Payload());
+
+        Assert.Equal(1, path.Registered);                       // PATH wired
+        Assert.True(File.Exists(resolved));                     // resolved.json compiled
+        Assert.Equal(2, result.ShimsWritten);                   // shims stamped for the registered tool
+        Assert.True(File.Exists(Path.Combine(shims, "node.exe")));
+        Assert.True(File.Exists(Path.Combine(shims, "npm.exe")));
+    }
+
+    [Fact]
+    public void Empty_config_still_wires_path_and_writes_resolved_json()
+    {
+        string shims = Path.Combine(_root, "shims");
+        string resolved = Path.Combine(_root, "resolved.json");
+        var path = new FakePathInstaller();
+
+        var result = FirstRun.Apply(path, new CentralConfig(), shims, resolved, Payload());
+
+        Assert.Equal(1, path.Registered);
         Assert.True(File.Exists(resolved));
         Assert.Equal(0, result.ShimsWritten);
     }
