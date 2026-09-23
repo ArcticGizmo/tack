@@ -1,0 +1,124 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+# One build job (Windows - tack is Windows-only in v1) produces the artifacts but does NOT touch the GitHub
+# Release. The final `release` job `needs` it, so a build failure means no release is published (rather than
+# a half-populated one). This runner has the C++ build tools, so tack-shim links as NativeAOT here (unlike a
+# fresh dev box, where publish.bat falls back to a self-contained single-file shim).
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Install vpk CLI
+        run: dotnet tool install -g vpk
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=$($env:GITHUB_REF_NAME -replace '^v','')" >> $env:GITHUB_OUTPUT
+
+      - name: Publish tack-ui (Avalonia head)
+        run: |
+          dotnet publish src/Tack.App/Tack.App.csproj -c Release -f net10.0-windows -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=embedded `
+            -p:Version=${{ steps.version.outputs.VERSION }} `
+            -o publish/
+
+      - name: Publish tack (CLI)
+        run: |
+          dotnet publish src/Tack.Cli/Tack.Cli.csproj -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=embedded `
+            -p:Version=${{ steps.version.outputs.VERSION }} `
+            -o publish/
+
+      # tack-shim into the SAME dir so Velopack packs all heads together. windows-latest ships the C++ build
+      # tools, so this links as NativeAOT (the real, fast shim).
+      - name: Publish tack-shim (NativeAOT)
+        run: dotnet publish src/Tack.Shim/Tack.Shim.csproj -c Release -r win-x64 -p:Version=${{ steps.version.outputs.VERSION }} -o publish/
+
+      # Measure the AOT shim's cold-start overhead on real hardware and record it in the run summary - this
+      # is the latency number the M1 spike could not get locally (no C++ workload there). Non-fatal.
+      - name: Shim latency bench
+        continue-on-error: true
+        run: |
+          pwsh -File tools/bench-shim.ps1 -ShimDir publish 6>&1 | Tee-Object -FilePath bench.txt
+          "### tack-shim latency (NativeAOT, CI)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          Get-Content bench.txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+      - name: Pack with Velopack
+        run: vpk pack --packId Tack --packTitle "Tack" --packVersion ${{ steps.version.outputs.VERSION }} --packDir publish/ --mainExe tack-ui.exe --outputDir releases/
+
+      # Everything in releases/: Tack-win-Setup.exe (what install.ps1 downloads and verifies), the Velopack
+      # update feed the in-app updater reads (nupkg + RELEASES + releases.win.json), and the portable .zip.
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: releases/
+          if-no-files-found: error
+
+  release:
+    needs: [build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # Flatten the build job into the single flat namespace a GitHub Release has, then hash it.
+      # SHA256SUMS.txt is what install.ps1 verifies the installer against before running it, so it has to
+      # describe exactly the bytes that get uploaded - which is why it's generated here.
+      - name: Collect artifacts and generate SHA256SUMS.txt
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          while IFS= read -r f; do
+            dest="dist/$(basename "$f")"
+            if [ -e "$dest" ]; then
+              echo "::error::Two build artifacts are both named $(basename "$f") - refusing to publish an ambiguous release."
+              exit 1
+            fi
+            mv "$f" "$dest"
+          done < <(find artifacts -type f | LC_ALL=C sort)
+
+          # install.ps1 resolves this asset by name from the release metadata; a release without it can't be
+          # installed by the one-liner, so fail here rather than shipping a broken install path.
+          if [ ! -f dist/Tack-win-Setup.exe ]; then
+            echo "::error::Tack-win-Setup.exe is missing - install.ps1 depends on it."
+            exit 1
+          fi
+
+          # Generated outside dist/ and moved in, so the manifest can never race its own glob.
+          ( cd dist && LC_ALL=C sha256sum -- * > ../SHA256SUMS.txt )
+          mv SHA256SUMS.txt dist/SHA256SUMS.txt
+
+          echo '### Published assets' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat dist/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
