@@ -1,0 +1,27 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+
+# Packaging / publish output
+publish/
+releases/
+
+# IDE / editor / user files
+.vs/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+
+# Reach-test generated artifacts (regenerate with spikes/m1-shim/reach-test/setup-reach-test.ps1)
+spikes/m1-shim/reach-test/shims/
+spikes/m1-shim/reach-test/targets/
+spikes/m1-shim/reach-test/projB/
+spikes/m1-shim/reach-test/proof/
+spikes/m1-shim/reach-test/VsReachTest/
+spikes/m1-shim/reach-test/*.task.xml
+spikes/m1-shim/reach-test/double-click-me.cmd
+
+# OS cruft
+Thumbs.db
+.DS_Store
