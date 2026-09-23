@@ -23,7 +23,7 @@
         <TextBlock Text="{Binding ShimsStatus}" FontWeight="SemiBold" />
       </StackPanel>
 
-      <Border BorderThickness="0,0,0,1" BorderBrush="#33888888" Padding="0,6,0,6" Margin="0,4,0,0">
+      <Border BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderBrush}" Padding="0,6,0,6" Margin="0,4,0,0">
         <Grid ColumnDefinitions="1.4*,1.4*,1.2*,2*,3*">
           <TextBlock Grid.Column="0" Text="TOOL" FontWeight="Bold" FontSize="11" Opacity="0.6" />
           <TextBlock Grid.Column="1" Text="RESOLVES TO" FontWeight="Bold" FontSize="11" Opacity="0.6" />

@@ -26,7 +26,7 @@
         <DataTemplate x:DataType="vm:ShimRow">
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Grid.Column="0" Text="{Binding Name}" Foreground="{Binding Brush}" />
-            <TextBlock Grid.Column="1" Text="{Binding StaleMark}" Foreground="#E0A800" FontSize="12" />
+            <TextBlock Grid.Column="1" Text="{Binding StaleMark}" Foreground="{DynamicResource WarnBrush}" FontSize="12" />
           </Grid>
         </DataTemplate>
       </ListBox.ItemTemplate>

@@ -5,7 +5,8 @@
         x:Class="Tack.App.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Width="1000" Height="680" MinWidth="760" MinHeight="480"
-        Title="tack" WindowStartupLocation="CenterScreen">
+        Title="tack" WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource PanelBgBrush}">
 
   <TabControl TabStripPlacement="Left" SelectedIndex="{Binding SelectedTabIndex}" Padding="0">
     <TabItem Header="Dashboard">

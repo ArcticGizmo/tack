@@ -18,6 +18,10 @@
     <PackageReference Include="Avalonia" Version="12.0.5" />
     <PackageReference Include="Avalonia.Desktop" Version="12.0.5" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.5" />
+    <!-- The curated WCAG-AA palette package perch themes from (assembly/namespace Palette.Theming). We apply
+         its built-in Nord (Dark) scheme: ThemeManager publishes ~70 semantic token brushes into
+         Application.Resources, consumed as {DynamicResource PanelBgBrush} / FgBrush / AccentBrush / ... -->
+    <PackageReference Include="ArcticGizmo.Avalonia.Palette" Version="0.2.0" />
     <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>
 

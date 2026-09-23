@@ -19,6 +19,11 @@ decides, the UI presents). No resolution or maintenance logic lives in the front
   disable their command while in flight.
 - **Compiled bindings** (`AvaloniaUseCompiledBindingsByDefault`) with `x:DataType` on every view/template, so
   every binding path is validated at build time.
+- **Nord (Dark) theme** via the `ArcticGizmo.Avalonia.Palette` package perch themes from. `ThemeManager`
+  publishes the palette's ~70 semantic token brushes into `Application.Resources`; views paint with
+  `{DynamicResource PanelBgBrush}` / `FgBrush` / `AccentBrush` / `Ok`/`Warn`/`DangerBrush`, and Fluent's own
+  `SystemAccentColor` is pointed at the Nord frost accent so tab selection/focus are Nord too (not the
+  Windows system accent). Surfaces render Nord Polar Night `#3B4252`.
 
 ## Screens
 

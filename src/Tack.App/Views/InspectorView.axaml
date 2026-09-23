@@ -33,7 +33,7 @@
 
       <GridSplitter Grid.Column="1" Width="6" Background="Transparent" />
 
-      <Border Grid.Column="2" BorderBrush="#33888888" BorderThickness="1" CornerRadius="6" Padding="14">
+      <Border Grid.Column="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="14">
         <StackPanel Spacing="8">
           <TextBlock Text="Resolution" FontWeight="Bold" Opacity="0.7" />
           <TextBlock Text="{Binding Detail}" FontFamily="Cascadia Code,Consolas,monospace" FontSize="13"
