@@ -1,0 +1,22 @@
+<Project>
+  <!--
+    Dev-only: put a tack-shim next to the CLI/UI build output, so a `run.bat` / `run-ui.bat` (Debug) instance can
+    reshim just like an installed one. Release packaging is untouched - publish.bat publishes the NativeAOT shim
+    into the same dir itself. The Debug shim is framework-dependent (tack-shim.exe + .dll + json + Tack.Core.dll);
+    ShimPayload already picks those support files up and Reshimmer copies them into the shims dir once.
+  -->
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Tack.Shim\Tack.Shim.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <Target Name="CopyDevShim" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug'">
+    <PropertyGroup>
+      <_DevShimOut>$(MSBuildThisFileDirectory)Tack.Shim\bin\$(Configuration)\net10.0\</_DevShimOut>
+    </PropertyGroup>
+    <ItemGroup>
+      <_DevShimFile Include="$(_DevShimOut)tack-shim.exe;$(_DevShimOut)tack-shim.dll;$(_DevShimOut)tack-shim.runtimeconfig.json;$(_DevShimOut)tack-shim.deps.json;$(_DevShimOut)Tack.Core.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_DevShimFile)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

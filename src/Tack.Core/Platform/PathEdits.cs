@@ -15,14 +15,27 @@ public static class PathEdits
 {
     /// <summary>The raw PATH with <paramref name="shimsDir"/> moved to the very front (deduped), or null if it
     /// already leads and nothing needs writing.</summary>
-    public static string? PrependFront(string? rawPath, string shimsDir, Func<string, string>? expand = null)
+    public static string? PrependFront(string? rawPath, string shimsDir, Func<string, string>? expand = null) =>
+        PromoteFront(rawPath, shimsDir, behind: null, expand);
+
+    /// <summary>
+    /// The raw PATH with <paramref name="shimsDir"/> moved to the front (deduped) - but placed directly AFTER the
+    /// first entry matching any of <paramref name="behind"/>, if one is on the PATH. That's how a dev instance goes
+    /// on PATH: ahead of every real tool install, yet still behind the release tack's shims so it never outranks
+    /// them. With nothing to sit behind it's simply the front. Null when the order is already right.
+    /// </summary>
+    public static string? PromoteFront(string? rawPath, string shimsDir, IEnumerable<string>? behind,
+        Func<string, string>? expand = null)
     {
         expand ??= Environment.ExpandEnvironmentVariables;
         string shims = Key(shimsDir, expand);
+        var anchors = new HashSet<string>((behind ?? Array.Empty<string>()).Select(b => Key(b, expand)));
+        anchors.Remove(shims); // never sit behind ourselves
 
         var entries = Split(rawPath);
-        var fixedUp = new List<string> { Trim(shimsDir) };
-        fixedUp.AddRange(entries.Where(p => Key(p, expand) != shims));
+        var fixedUp = entries.Where(p => Key(p, expand) != shims).ToList();
+        int anchor = fixedUp.FindIndex(p => anchors.Contains(Key(p, expand)));
+        fixedUp.Insert(anchor + 1, Trim(shimsDir)); // -1 (no anchor) -> the very front
 
         return SameByKey(entries, fixedUp, expand) ? null : string.Join(';', fixedUp);
     }

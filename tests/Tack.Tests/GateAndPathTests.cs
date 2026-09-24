@@ -2,6 +2,7 @@ using Tack.Core;
 using Tack.Core.Config;
 using Tack.Core.Maintenance;
 using Tack.Core.Platform;
+using Tack.Core.Resolution;
 using Xunit;
 
 namespace Tack.Tests;
@@ -150,5 +151,87 @@ public sealed class PathDoctorDisabledTests : IDisposable
 
         Assert.Contains(report.Checks, c => c.Title == "tack is disabled" && c.Status == CheckStatus.Warn);
         Assert.DoesNotContain(report.Checks, c => c.Title == "Shims directory is on PATH");
+    }
+}
+
+public sealed class DevBehindReleaseTests : IDisposable
+{
+    private readonly string _root = Directory.CreateTempSubdirectory("tack-devrel-").FullName;
+    public void Dispose() { try { Directory.Delete(_root, true); } catch { } }
+
+    private const string Release = @"C:\Users\me\AppData\Local\tack\shims";
+    private const string Dev = @"C:\Users\me\AppData\Local\tack (Dev)\shims";
+
+    [Fact]
+    public void PromoteFront_puts_dev_directly_behind_the_release_shims()
+    {
+        var result = PathEdits.PromoteFront($@"{Release};C:\Program Files\nodejs;C:\Windows", Dev, new[] { Release });
+        Assert.Equal($@"{Release};{Dev};C:\Program Files\nodejs;C:\Windows", result);
+    }
+
+    [Fact]
+    public void PromoteFront_moves_dev_up_from_lower_in_the_path()
+    {
+        var result = PathEdits.PromoteFront($@"{Release};C:\nodejs;{Dev}", Dev, new[] { Release });
+        Assert.Equal($@"{Release};{Dev};C:\nodejs", result);
+    }
+
+    [Fact]
+    public void PromoteFront_goes_to_the_very_front_with_no_release_on_path()
+    {
+        var result = PathEdits.PromoteFront(@"C:\nodejs;C:\Windows", Dev, new[] { Release });
+        Assert.Equal($@"{Dev};C:\nodejs;C:\Windows", result);
+    }
+
+    [Fact]
+    public void PromoteFront_returns_null_when_dev_already_sits_behind_release()
+    {
+        Assert.Null(PathEdits.PromoteFront($@"{Release};{Dev};C:\Windows", Dev, new[] { Release }));
+    }
+
+    [Fact]
+    public void Release_prepend_still_takes_the_front_ahead_of_dev()
+    {
+        Assert.Equal($@"{Release};{Dev};C:\Windows", PathEdits.PrependFront($@"{Dev};C:\Windows", Release));
+    }
+
+    [Fact]
+    public void Passthrough_continues_after_its_own_entry()
+    {
+        // The release shim hands over to the dev shim; the dev shim never goes back to the release one.
+        string path = $@"{Release};C:\nodejs;{Dev};C:\other";
+        Assert.Equal(new[] { @"C:\nodejs", Dev, @"C:\other" }, PassthroughScan.Candidates(path, Release));
+        Assert.Equal(new[] { @"C:\other" }, PassthroughScan.Candidates(path, Dev));
+    }
+
+    [Fact]
+    public void Passthrough_off_path_scans_everything_but_itself()
+    {
+        Assert.Equal(new[] { Release, @"C:\x" }, PassthroughScan.Candidates($@"{Release};C:\x", Dev));
+    }
+
+    [Fact]
+    public void Passthrough_matches_its_own_entry_despite_a_trailing_slash()
+    {
+        Assert.Equal(new[] { @"C:\x" }, PassthroughScan.Candidates($@"{Release};{Dev}\;C:\x", Dev));
+    }
+
+    [Fact]
+    public void Doctor_reports_a_release_tack_ahead_as_a_handover_not_shadowing()
+    {
+        string release = Directory.CreateDirectory(Path.Combine(_root, "tack", "shims")).FullName;
+        string dev = Directory.CreateDirectory(Path.Combine(_root, "tack (Dev)", "shims")).FullName;
+        File.WriteAllText(Path.Combine(release, "node.exe"), "SHIM");
+        var config = new CentralConfig
+        {
+            Tools = { ["node"] = new RegisteredTool { Versions = { ["1"] = new InstalledVersion { BinDir = _root, Exposes = { "node" } } } } },
+        };
+
+        var report = PathDoctor.Run(config, dev,
+            t => t == EnvironmentVariableTarget.User ? $"{release};{dev}" : "",
+            tackShimsDirs: new[] { release, dev });
+
+        Assert.Contains(report.Checks, c => c.Title == "Behind another tack instance" && c.Detail.Contains("node"));
+        Assert.DoesNotContain(report.Checks, c => c.Title == "'node' is shadowed");
     }
 }

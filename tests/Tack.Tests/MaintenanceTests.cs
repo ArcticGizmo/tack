@@ -207,6 +207,20 @@ public sealed class PathDoctorTests : IDisposable
     }
 
     [Fact]
+    public void Says_which_path_holds_the_shims_dir()
+    {
+        string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
+
+        var onSystem = PathDoctor.Run(NodeAt(_root), shims,
+            t => t == EnvironmentVariableTarget.Machine ? $@"C:\first;{shims}" : "");
+        Assert.Contains(onSystem.Checks, c => c.Title == "Shims directory is on PATH" && c.Detail == "system PATH, entry 2");
+
+        var userOnly = PathDoctor.Run(NodeAt(_root), shims,
+            t => t == EnvironmentVariableTarget.User ? shims : "");
+        Assert.Contains(userOnly.Checks, c => c.Title == "Shims directory is on PATH" && c.Detail.StartsWith("user PATH only"));
+    }
+
+    [Fact]
     public void Flags_a_missing_bindir()
     {
         string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;

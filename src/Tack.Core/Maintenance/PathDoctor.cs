@@ -28,8 +28,12 @@ public static class PathDoctor
         Func<string, bool>? fileExists = null,
         Func<string, bool>? dirExists = null,
         string? activeShimsDir = null,
-        bool disabled = false)
+        bool disabled = false,
+        IEnumerable<string>? tackShimsDirs = null)
     {
+        // Shims dirs of any tack instance (both profiles). One of those ahead of us isn't a rogue install - it's
+        // the release tack in front of a dev one - so it's reported as a hand-over hint, not per-tool shadowing.
+        var tackDirs = new HashSet<string>((tackShimsDirs ?? TackPaths.AllShimsDirs).Select(Norm));
         fileExists ??= File.Exists;
         dirExists ??= Directory.Exists;
         // Where the shims actually live now (the parked dir while disabled); PATH/shadow checks still use the
@@ -60,23 +64,38 @@ public static class PathDoctor
         {
             report.Add("Shims directory is on PATH",
                 shimsIndex >= 0 ? CheckStatus.Ok : CheckStatus.Fail,
-                shimsIndex >= 0 ? "on the user/machine PATH" : "not on PATH - tack won't intercept tool calls");
+                shimsIndex >= 0 ? WherePlaced(getPath, shims) : "not on PATH - tack won't intercept tool calls");
 
             // Shadowing: an earlier PATH dir that already provides a shimmed binary wins over the shim.
             if (shimsIndex >= 0)
             {
+                var byOtherTack = new SortedDictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
                 foreach (var name in names)
                 {
                     for (int i = 0; i < shimsIndex; i++)
                     {
                         if (BinaryLocator.Locate(effective[i], name, fileExists) is not null)
                         {
-                            report.Add($"'{name}' is shadowed", CheckStatus.Warn,
-                                $"{effective[i]} precedes the shims dir on PATH");
+                            if (tackDirs.Contains(Norm(effective[i])))
+                            {
+                                if (!byOtherTack.TryGetValue(effective[i], out var list))
+                                    byOtherTack[effective[i]] = list = new List<string>();
+                                list.Add(name);
+                            }
+                            else
+                            {
+                                report.Add($"'{name}' is shadowed", CheckStatus.Warn,
+                                    $"{effective[i]} precedes the shims dir on PATH");
+                            }
                             break;
                         }
                     }
                 }
+
+                foreach (var (dir, shared) in byOtherTack)
+                    report.Add("Behind another tack instance", CheckStatus.Warn,
+                        $"{dir} answers first for {string.Join(", ", shared.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}; " +
+                        "run 'tack disable' on that instance to hand them over");
             }
         }
 
@@ -111,6 +130,18 @@ public static class PathDoctor
                 foreach (var e in v.Exposes)
                     s.Add(e);
         return s;
+    }
+
+    /// <summary>Say exactly which PATH holds the shims dir, and where: "system PATH, entry 2". A user-PATH-only
+    /// placement gets a plain-English caveat, since Windows searches the whole system PATH first.</summary>
+    private static string WherePlaced(Func<EnvironmentVariableTarget, string?> getPath, string shims)
+    {
+        int machine = Split(getPath(EnvironmentVariableTarget.Machine)).FindIndex(p => Norm(p) == shims);
+        if (machine >= 0) return $"system PATH, entry {machine + 1}";
+
+        int user = Split(getPath(EnvironmentVariableTarget.User)).FindIndex(p => Norm(p) == shims);
+        return $"user PATH only (entry {user + 1}) - anything on the system PATH is found first; " +
+               "'tack doctor --fix' moves it onto the system PATH";
     }
 
     private static List<string> Split(string? p) => string.IsNullOrEmpty(p)

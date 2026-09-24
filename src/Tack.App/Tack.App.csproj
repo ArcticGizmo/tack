@@ -34,4 +34,6 @@
          (read via the assembly manifest under the logical name "Tack.CHANGELOG.md"). -->
     <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="Tack.CHANGELOG.md" />
   </ItemGroup>
+
+  <Import Project="..\DevShim.targets" />
 </Project>

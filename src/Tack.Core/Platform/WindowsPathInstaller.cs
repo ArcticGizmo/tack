@@ -60,16 +60,18 @@ public sealed class WindowsPathInstaller : IPathInstaller
     }
 
     /// <summary>
-    /// Move the shims dir to the very front of the MACHINE PATH so it beats system-wide tool installs a
-    /// user-PATH entry can't - the core of <c>tack doctor --fix</c>. Reads and writes the raw registry value so
-    /// %VAR% tokens survive, and returns the before/after (null when it already led and nothing was written).
+    /// Move the shims dir to the front of the MACHINE PATH so it beats system-wide tool installs a user-PATH
+    /// entry can't - the core of <c>tack doctor --fix</c>. With <paramref name="behind"/> (a dev instance: the
+    /// release shims dirs) it lands directly after the first of those on PATH instead of at index 0, so dev beats
+    /// every real install but never the release tack. Reads and writes the raw registry value so %VAR% tokens
+    /// survive, and returns the before/after (null when the order was already right and nothing was written).
     /// Writing HKLM needs admin: unelevated it throws (ERROR_ACCESS_DENIED), which the caller turns into a UAC
     /// relaunch.
     /// </summary>
-    public PathChange? PrependShimsToMachinePath()
+    public PathChange? PromoteShimsOnMachinePath(IEnumerable<string>? behind = null)
     {
         string before = WindowsEnvRegistry.ReadRaw(machine: true);
-        string? after = PathEdits.PrependFront(before, _shimsDir);
+        string? after = PathEdits.PromoteFront(before, _shimsDir, behind);
         if (after is null) return null;
 
         WindowsEnvRegistry.WriteExpand(machine: true, after);

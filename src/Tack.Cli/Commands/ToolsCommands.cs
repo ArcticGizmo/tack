@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Spectre.Console;
 using Spectre.Console.Cli;
+using Tack.Core;
 using Tack.Core.Config;
 using Tack.Core.Maintenance;
 using Tack.Core.Resolution;
@@ -92,7 +93,8 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
         var matches = PathScan.FindOnPath(
             tool,
             t => Environment.GetEnvironmentVariable("PATH", t),
-            new[] { env.ShimsDir, env.DisabledShimsDir, env.InstallDir },
+            // Every tack shims dir (both profiles): a dev instance must not "discover" the release tack's shims.
+            TackPaths.AllShimsDirs.Append(env.ShimsDir).Append(env.DisabledShimsDir).Append(env.InstallDir),
             File.Exists);
 
         if (matches.Count == 0)
