@@ -87,7 +87,7 @@ public static class PathDoctor
             {
                 string b = Path.GetFileNameWithoutExtension(exe);
                 if (!names.Contains(b))
-                    report.Add($"Stale shim '{b}'", CheckStatus.Warn, "no longer exposed; run tack reshim");
+                    report.Add($"Stale shim '{b}'", CheckStatus.Warn, "no longer exposed; run tack doctor --fix");
             }
         }
 

@@ -7,18 +7,21 @@ namespace Tack.App.ViewModels;
 /// <summary>
 /// The PATH doctor: runs Core's PathDoctor checks and visualises the effective PATH so the shims dir and
 /// anything shadowing it are obvious. Read-only by design - PATH mutation stays at install time (the Velopack
-/// callback), so the app never writes an EDR-sensitive HKCU\Environment change.
+/// callback), so the app never writes an EDR-sensitive HKCU\Environment change. Regenerate reshims (the only
+/// write here; it touches tack's own dirs, never PATH) - the fix for stale shims the checks flag.
 /// </summary>
 public sealed class PathViewModel : ViewModelBase
 {
     private readonly TackServices _services;
     private string _summary = "";
     private bool _healthy;
+    private string _reshimStatus = "";
 
     public PathViewModel(TackServices services)
     {
         _services = services;
         RefreshCommand = new RelayCommand(Refresh);
+        ReshimCommand = new AsyncRelayCommand(ReshimAsync);
     }
 
     public ObservableCollection<DoctorRow> Checks { get; } = new();
@@ -27,7 +30,19 @@ public sealed class PathViewModel : ViewModelBase
     public string Summary { get => _summary; private set => SetField(ref _summary, value); }
     public bool Healthy { get => _healthy; private set => SetField(ref _healthy, value); }
 
+    public string ReshimStatus { get => _reshimStatus; private set => SetField(ref _reshimStatus, value); }
+
     public RelayCommand RefreshCommand { get; }
+    public AsyncRelayCommand ReshimCommand { get; }
+
+    private async Task ReshimAsync()
+    {
+        var result = await Task.Run(() => _services.Reshim(_services.Load()));
+        ReshimStatus = result.ShimPayloadMissing
+            ? "resolved.json updated, but tack-shim.exe wasn't found beside tack-ui (expected under a dev run) - no shims stamped."
+            : $"Regenerated: {result.ShimsWritten} written, {result.ShimsPruned} pruned.";
+        Refresh();
+    }
 
     public void Refresh()
     {

@@ -86,12 +86,3 @@ public sealed class PathEntryRow
     public IBrush Brush => IsShims ? Presentation.Ok : Presentation.Muted;
     public FontWeight Weight => IsShims ? FontWeight.SemiBold : FontWeight.Normal;
 }
-
-/// <summary>One generated shim exe.</summary>
-public sealed class ShimRow
-{
-    public required string Name { get; init; }
-    public bool Stale { get; init; }
-    public string StaleMark => Stale ? "stale" : "";
-    public IBrush Brush => Stale ? Presentation.Warn : Presentation.Muted;
-}

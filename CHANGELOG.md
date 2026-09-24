@@ -18,8 +18,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- `tack doctor` and `tack shims` now report the disabled state plainly instead of crying FAIL about a shims dir that's off PATH on purpose.
+- `tack doctor` now reports the disabled state plainly instead of crying FAIL about a shims dir that's off PATH on purpose.
 - Registry commands are now grouped under `tack tools`. **Breaking (pre-1.0):** `tack register` is now `tack tools add`, and `tack list` / `tack ls` are now `tack tools list`. The old top-level names are gone.
+- Shims are plumbing, and now they're treated like it. **Breaking (pre-1.0):** `tack shims` is gone - `tack doctor` already covered everything it said about PATH health (and more), and the one useful bit, which command names tack intercepts, is now a `commands` column in `tack tools list`. `tack reshim` still works but is hidden from `--help`; every command that changes config already reshims, and so does `tack doctor --fix`, so you only need it after hand-editing `config.json`.
+- The desktop UI loses its Shims tab for the same reason. The "Regenerate shims" button moved to the PATH doctor page, next to the stale-shim warnings it fixes; the Registry page already listed each version's exposed commands.
 
 ---
 

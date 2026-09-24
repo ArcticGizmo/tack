@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- The Avalonia desktop head (exe name `tack-ui`, WinExe). Launched by `tack open`, and the Velopack
        Start-Menu shortcut target. M4 fills it in: a tabbed shell (dashboard, directory inspector,
-       registry/bindings editors, PATH doctor, shims panel), all MVVM over the same Tack.Core the CLI drives.
+       registry/bindings editors, PATH doctor), all MVVM over the same Tack.Core the CLI drives.
        This head also hosts the Velopack install lifecycle callbacks that wire tack onto the user PATH.
        Windows-only in v1. -->
   <PropertyGroup>

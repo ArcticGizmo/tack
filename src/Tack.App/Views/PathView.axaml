@@ -13,6 +13,9 @@
         <TextBlock Classes="status" Classes.ok="{Binding Healthy}" Classes.warn="{Binding !Healthy}"
                    FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Text="{Binding Summary}" />
         <Button Classes="secondary" Content="Refresh" Command="{Binding RefreshCommand}" />
+        <Button Classes="secondary" Content="Regenerate shims" Command="{Binding ReshimCommand}"
+                ToolTip.Tip="Rebuild tack's per-command proxies from the registry (fixes stale shims)." />
+        <TextBlock Classes="status muted" FontSize="12" VerticalAlignment="Center" Text="{Binding ReshimStatus}" />
       </StackPanel>
     </StackPanel>
 

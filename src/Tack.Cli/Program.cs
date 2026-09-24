@@ -30,8 +30,6 @@ app.Configure(cfg =>
         tools.AddCommand<ToolsListCommand>("list")
             .WithDescription("List registered tools and versions.");
     });
-    cfg.AddCommand<ShimsCommand>("shims")
-        .WithDescription("List generated shims and PATH health.");
     cfg.AddCommand<DoctorCommand>("doctor")
         .WithDescription("Diagnose PATH and shim health (--fix to repair).");
     cfg.AddCommand<DisableCommand>("disable")
@@ -42,12 +40,15 @@ app.Configure(cfg =>
         .WithDescription("Add a central directory binding (managed without a repo tack.yml).");
     cfg.AddCommand<UseCommand>("use")
         .WithDescription("Pin a tool version in this directory (writes tack.yml).");
-    cfg.AddCommand<ReshimCommand>("reshim")
-        .WithDescription("Recompile central config and regenerate the shims.");
     cfg.AddCommand<OpenCommand>("open").WithAlias("ui")
         .WithDescription("Launch the tack desktop UI.");
     cfg.AddCommand<ChangelogCommand>("changelog")
         .WithDescription("Show what changed in tack (latest release; --all for the full history).");
+
+    // Hidden: every mutating command (and doctor --fix) already reshims; this is the escape hatch after a
+    // hand-edit of config.json.
+    cfg.AddCommand<ReshimCommand>("reshim").IsHidden()
+        .WithDescription("Recompile central config and regenerate the shims.");
 
     // Hidden: the elevated half of `tack doctor --fix` (machine-PATH write). Invoked via a UAC relaunch.
     cfg.AddCommand<ApplyMachinePathCommand>("apply-machine-path").IsHidden();

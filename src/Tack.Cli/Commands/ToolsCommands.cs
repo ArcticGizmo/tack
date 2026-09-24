@@ -151,13 +151,20 @@ public sealed class ToolsListCommand : Command
         table.AddColumn("versions");
         table.AddColumn("default");
         table.AddColumn("here");
+        table.AddColumn("commands");
         foreach (var (name, tool) in config.Tools.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
         {
             string versions = string.Join(", ", tool.Versions.Keys.OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
             string def = config.Defaults.TryGetValue(name, out var d) ? d : "-";
             var r = resolver.Resolve(name, cwd, ctx);
             string here = r.Resolved ? r.Version! : "-";
-            table.AddRow(Markup.Escape(name), Markup.Escape(versions), Markup.Escape(def), Markup.Escape(here));
+            // The command names tack intercepts for this tool (union across versions).
+            string commands = string.Join(", ", tool.Versions.Values
+                .SelectMany(v => v.Exposes)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+            table.AddRow(Markup.Escape(name), Markup.Escape(versions), Markup.Escape(def), Markup.Escape(here),
+                $"[grey]{Markup.Escape(commands)}[/]");
         }
         AnsiConsole.Write(table);
         return 0;

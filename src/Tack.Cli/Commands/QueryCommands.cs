@@ -97,38 +97,3 @@ public sealed class WhichCommand : Command<WhichSettings>
         return 0;
     }
 }
-
-// ---- shims ---------------------------------------------------------------------------------------
-
-public sealed class ShimsCommand : Command
-{
-    public override int Execute(CommandContext context)
-    {
-        var env = new TackEnvironment();
-        string dir = env.ActiveShimsDir;
-        AnsiConsole.MarkupLine($"[grey]shims dir:[/] {Markup.Escape(dir)}");
-
-        if (env.IsDisabled)
-            AnsiConsole.MarkupLine("[yellow]tack is disabled[/] - shims are parked here; run [green]tack enable[/] to go live.");
-
-        if (!Directory.Exists(dir))
-        {
-            AnsiConsole.MarkupLine("[yellow]shims dir does not exist yet - run [green]tack reshim[/].[/]");
-            return 0;
-        }
-
-        var exes = Directory.GetFiles(dir, "*.exe")
-            .Select(Path.GetFileNameWithoutExtension)
-            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        AnsiConsole.MarkupLine(exes.Count == 0
-            ? "[yellow]no shims generated.[/]"
-            : "shims: " + string.Join(", ", exes.Select(x => Markup.Escape(x!))));
-
-        if (!env.IsDisabled)
-            AnsiConsole.MarkupLine(Render.OnPath(env.ShimsDir)
-                ? "[green]shims dir is on PATH.[/]"
-                : "[red]shims dir is NOT on PATH[/] - run [green]tack doctor[/].");
-        return 0;
-    }
-}
