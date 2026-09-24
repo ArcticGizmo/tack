@@ -79,7 +79,9 @@ public sealed class RegisterCommand : Command<RegisterSettings>
         AnsiConsole.MarkupLine($"[green]registered[/] {Markup.Escape(spec.Tool)}@{Markup.Escape(spec.Version!)} -> {Markup.Escape(binDir)}");
         AnsiConsole.MarkupLine($"[grey]exposes:[/] {Markup.Escape(string.Join(", ", exposes))}");
         Mutations.ReportReshim(env.Reshim(config));
-        if (!Render.OnPath(env.ShimsDir))
+        if (env.IsDisabled)
+            AnsiConsole.MarkupLine("[yellow]note:[/] tack is disabled - this is configured but won't take effect until [green]tack enable[/].");
+        else if (!Render.OnPath(env.ShimsDir))
             AnsiConsole.MarkupLine("[yellow]note:[/] the shims dir is not on PATH yet - installing tack wires it up, or run [green]tack doctor[/].");
         return 0;
     }

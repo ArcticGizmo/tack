@@ -59,6 +59,35 @@ public sealed class WindowsPathInstaller : IPathInstaller
         Broadcast();
     }
 
+    /// <summary>
+    /// Promote the shims dir to the very front of the MACHINE PATH (and strip a now-redundant copy from the
+    /// user PATH), so it beats system-wide tool installs that a user-PATH entry can't - this is what
+    /// <c>tack doctor --fix</c> runs. Writing the machine PATH needs admin: unelevated it throws
+    /// <see cref="System.Security.SecurityException"/>, which the caller turns into a UAC relaunch. Returns
+    /// true if anything changed. Idempotent - a no-op once the shims dir already leads the machine PATH.
+    /// </summary>
+    public bool PromoteToMachineFront()
+    {
+        Directory.CreateDirectory(_shimsDir);
+
+        var plan = MachinePathPlanner.PlaceFront(
+            Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine),
+            Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User),
+            _shimsDir);
+
+        if (!plan.AnyChange) return false;
+
+        // Machine first: it's the privileged, load-bearing write. If it throws (not elevated) we haven't
+        // touched the user PATH, so nothing is left half-done.
+        if (plan.MachineChanged)
+            Environment.SetEnvironmentVariable("PATH", plan.NewMachinePath, EnvironmentVariableTarget.Machine);
+        if (plan.UserChanged)
+            Environment.SetEnvironmentVariable("PATH", plan.NewUserPath, EnvironmentVariableTarget.User);
+
+        Broadcast();
+        return true;
+    }
+
     private static List<string> Split(string pathVar) =>
         pathVar.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 

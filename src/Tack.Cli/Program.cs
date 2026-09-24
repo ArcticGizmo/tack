@@ -25,7 +25,11 @@ app.Configure(cfg =>
     cfg.AddCommand<ShimsCommand>("shims")
         .WithDescription("List generated shims and PATH health.");
     cfg.AddCommand<DoctorCommand>("doctor")
-        .WithDescription("Diagnose PATH and shim health.");
+        .WithDescription("Diagnose PATH and shim health (--fix to repair).");
+    cfg.AddCommand<DisableCommand>("disable")
+        .WithDescription("Turn tack off: park the shims dir so tools fall through to the real PATH.");
+    cfg.AddCommand<EnableCommand>("enable")
+        .WithDescription("Turn tack back on after 'tack disable'.");
     cfg.AddCommand<RegisterCommand>("register")
         .WithDescription("Register an existing tool install in the central registry.");
     cfg.AddCommand<BindCommand>("bind")
@@ -38,6 +42,9 @@ app.Configure(cfg =>
         .WithDescription("Launch the tack desktop UI.");
     cfg.AddCommand<ChangelogCommand>("changelog")
         .WithDescription("Show what changed in tack (latest release; --all for the full history).");
+
+    // Hidden: the elevated half of `tack doctor --fix` (machine-PATH write). Invoked via a UAC relaunch.
+    cfg.AddCommand<ApplyMachinePathCommand>("apply-machine-path").IsHidden();
 });
 
 return app.Run(args);

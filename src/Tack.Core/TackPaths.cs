@@ -15,6 +15,11 @@ public static class TackPaths
     /// <summary>The directory of shim exes that goes on PATH (one *.exe per exposed tool binary).</summary>
     public static string ShimsDir => Path.Combine(Root, "shims");
 
+    /// <summary>Where the shims dir is parked while tack is disabled (<c>tack disable</c>). The PATH entry
+    /// still points at <see cref="ShimsDir"/>, so with the folder renamed away nothing resolves and tack
+    /// stops intercepting - but config/reshim keep writing here, so <c>tack enable</c> brings it back live.</summary>
+    public static string DisabledShimsDir => Path.Combine(Root, "shims_disabled");
+
     /// <summary>Central, tool-managed config: registry + bindings + defaults (JSON).</summary>
     public static string ConfigJson => Path.Combine(Root, "config.json");
 

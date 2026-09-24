@@ -26,17 +26,22 @@ public static class PathDoctor
         string shimsDir,
         Func<EnvironmentVariableTarget, string?> getPath,
         Func<string, bool>? fileExists = null,
-        Func<string, bool>? dirExists = null)
+        Func<string, bool>? dirExists = null,
+        string? activeShimsDir = null,
+        bool disabled = false)
     {
         fileExists ??= File.Exists;
         dirExists ??= Directory.Exists;
+        // Where the shims actually live now (the parked dir while disabled); PATH/shadow checks still use the
+        // canonical shimsDir, since that's the entry wired onto PATH.
+        activeShimsDir ??= shimsDir;
 
         var report = new DoctorReport();
         string shims = Norm(shimsDir);
         var names = ExposedNames(config);
 
         report.Add("Shims directory exists",
-            dirExists(shimsDir) ? CheckStatus.Ok : CheckStatus.Warn, shimsDir);
+            dirExists(activeShimsDir) ? CheckStatus.Ok : CheckStatus.Warn, activeShimsDir);
 
         // Effective resolution order on Windows: machine PATH entries, then user PATH entries.
         var effective = Split(getPath(EnvironmentVariableTarget.Machine))
@@ -44,31 +49,41 @@ public static class PathDoctor
             .ToList();
         int shimsIndex = effective.FindIndex(p => Norm(p) == shims);
 
-        report.Add("Shims directory is on PATH",
-            shimsIndex >= 0 ? CheckStatus.Ok : CheckStatus.Fail,
-            shimsIndex >= 0 ? "on the user/machine PATH" : "not on PATH - tack won't intercept tool calls");
-
-        // Shadowing: an earlier PATH dir that already provides a shimmed binary wins over the shim.
-        if (shimsIndex >= 0)
+        if (disabled)
         {
-            foreach (var name in names)
+            // Interception is intentionally off (`tack disable`): the PATH entry points at the canonical dir
+            // that's renamed away. Report the state plainly instead of failing the on-PATH / shadow checks.
+            report.Add("tack is disabled", CheckStatus.Warn,
+                "interception off; run 'tack enable' to turn it back on");
+        }
+        else
+        {
+            report.Add("Shims directory is on PATH",
+                shimsIndex >= 0 ? CheckStatus.Ok : CheckStatus.Fail,
+                shimsIndex >= 0 ? "on the user/machine PATH" : "not on PATH - tack won't intercept tool calls");
+
+            // Shadowing: an earlier PATH dir that already provides a shimmed binary wins over the shim.
+            if (shimsIndex >= 0)
             {
-                for (int i = 0; i < shimsIndex; i++)
+                foreach (var name in names)
                 {
-                    if (BinaryLocator.Locate(effective[i], name, fileExists) is not null)
+                    for (int i = 0; i < shimsIndex; i++)
                     {
-                        report.Add($"'{name}' is shadowed", CheckStatus.Warn,
-                            $"{effective[i]} precedes the shims dir on PATH");
-                        break;
+                        if (BinaryLocator.Locate(effective[i], name, fileExists) is not null)
+                        {
+                            report.Add($"'{name}' is shadowed", CheckStatus.Warn,
+                                $"{effective[i]} precedes the shims dir on PATH");
+                            break;
+                        }
                     }
                 }
             }
         }
 
         // Stale shims.
-        if (dirExists(shimsDir))
+        if (dirExists(activeShimsDir))
         {
-            foreach (var exe in Directory.GetFiles(shimsDir, "*.exe"))
+            foreach (var exe in Directory.GetFiles(activeShimsDir, "*.exe"))
             {
                 string b = Path.GetFileNameWithoutExtension(exe);
                 if (!names.Contains(b))

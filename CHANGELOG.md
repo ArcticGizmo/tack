@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `tack disable` / `tack enable` - a one-word off switch. Disable parks the shims dir as `shims_disabled` so the PATH entry resolves to nothing and every tool falls straight through to the real PATH; enable renames it back. No PATH edits, no admin, and even already-open shells stop hitting the shims immediately. Handy for A/B-ing "with tack vs without", and for dev testing.
+- Configuration keeps working while disabled: `register`, `bind` and `reshim` write into the parked dir, so whatever you set up meanwhile goes live the moment you `tack enable`.
+- `tack doctor --fix` - stop reading the diagnosis and just fix it. Regenerates shims, then promotes the shims dir to the **front of the system (machine) PATH** so it beats system-wide installs a user-PATH entry can never outrank. Prompts for elevation via UAC when it needs it (and only for that one write).
+
+### Changed
+
+- `tack doctor` and `tack shims` now report the disabled state plainly instead of crying FAIL about a shims dir that's off PATH on purpose.
+
 ---
 
 ## [v0.1.0] - 2026-09-23

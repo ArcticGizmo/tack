@@ -141,15 +141,19 @@ public sealed class ShimsCommand : Command
     public override int Execute(CommandContext context)
     {
         var env = new TackEnvironment();
-        AnsiConsole.MarkupLine($"[grey]shims dir:[/] {Markup.Escape(env.ShimsDir)}");
+        string dir = env.ActiveShimsDir;
+        AnsiConsole.MarkupLine($"[grey]shims dir:[/] {Markup.Escape(dir)}");
 
-        if (!Directory.Exists(env.ShimsDir))
+        if (env.IsDisabled)
+            AnsiConsole.MarkupLine("[yellow]tack is disabled[/] - shims are parked here; run [green]tack enable[/] to go live.");
+
+        if (!Directory.Exists(dir))
         {
             AnsiConsole.MarkupLine("[yellow]shims dir does not exist yet - run [green]tack reshim[/].[/]");
             return 0;
         }
 
-        var exes = Directory.GetFiles(env.ShimsDir, "*.exe")
+        var exes = Directory.GetFiles(dir, "*.exe")
             .Select(Path.GetFileNameWithoutExtension)
             .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -157,9 +161,10 @@ public sealed class ShimsCommand : Command
             ? "[yellow]no shims generated.[/]"
             : "shims: " + string.Join(", ", exes.Select(x => Markup.Escape(x!))));
 
-        AnsiConsole.MarkupLine(Render.OnPath(env.ShimsDir)
-            ? "[green]shims dir is on PATH.[/]"
-            : "[red]shims dir is NOT on PATH[/] - run [green]tack doctor[/].");
+        if (!env.IsDisabled)
+            AnsiConsole.MarkupLine(Render.OnPath(env.ShimsDir)
+                ? "[green]shims dir is on PATH.[/]"
+                : "[red]shims dir is NOT on PATH[/] - run [green]tack doctor[/].");
         return 0;
     }
 }
