@@ -39,9 +39,9 @@ internal static class Presentation
     public static string SourceLabel(ResolutionSource s) => s switch
     {
         ResolutionSource.EnvOverride => "env override",
-        ResolutionSource.EnforceBinding => "enforced binding",
+        ResolutionSource.EnforcedZone => "enforced zone",
         ResolutionSource.TackYml => "tack.yml",
-        ResolutionSource.Binding => "binding",
+        ResolutionSource.Zone => "zone",
         ResolutionSource.Default => "default",
         ResolutionSource.Passthrough => "passthrough",
         ResolutionSource.VersionNotInstalled => "missing",
@@ -52,9 +52,9 @@ internal static class Presentation
     public static IBrush SourceBrush(ResolutionSource s) => s switch
     {
         ResolutionSource.EnvOverride => Accent,
-        ResolutionSource.EnforceBinding => Fail,
+        ResolutionSource.EnforcedZone => Fail,
         ResolutionSource.TackYml => Ok,
-        ResolutionSource.Binding => Accent,
+        ResolutionSource.Zone => Accent,
         ResolutionSource.Default => Muted,
         ResolutionSource.Passthrough => Muted,
         ResolutionSource.VersionNotInstalled => Fail,

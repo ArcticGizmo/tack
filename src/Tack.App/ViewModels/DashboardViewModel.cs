@@ -58,7 +58,7 @@ public sealed class DashboardViewModel : ViewModelBase
     {
         var config = _services.Load();
         int versions = config.Tools.Values.Sum(t => t.Versions.Count);
-        Summary = $"{config.Tools.Count} tool(s), {versions} version(s), {config.Bindings.Count} binding(s), "
+        Summary = $"{config.Tools.Count} tool(s), {versions} version(s), {config.Zones.Count} zone(s), "
                   + $"{config.Defaults.Count} default(s).";
 
         var report = _services.Doctor(config);

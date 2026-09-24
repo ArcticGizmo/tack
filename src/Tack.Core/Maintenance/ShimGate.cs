@@ -11,7 +11,7 @@ public sealed record GateResult(GateAction Action, string Detail);
 /// (executable resolution hits the filesystem live). Enabling renames it back.
 ///
 /// Crucially, config keeps working while disabled: <see cref="ActiveDir"/> returns the parked dir, so
-/// <c>register</c> / <c>bind</c> / <c>reshim</c> stamp shims into <c>shims_disabled</c>, and <c>tack enable</c>
+/// <c>tools add</c> / <c>zones add</c> / <c>reshim</c> stamp shims into <c>shims_disabled</c>, and <c>tack enable</c>
 /// makes everything configured meanwhile go live in one rename. Uses the real filesystem directly (like
 /// Reshimmer) and is exercised through temp dirs in tests.
 /// </summary>

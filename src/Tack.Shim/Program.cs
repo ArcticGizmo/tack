@@ -13,7 +13,7 @@ using Tack.Core.Resolution;
 // forwards args + std streams, ignores Ctrl-C itself (lets the child own the interrupt), waits, and exits
 // with the child's exit code.
 //
-// All resolution logic lives in Tack.Core (the resolver, glob, version match, mini tack.yml parser). The
+// All resolution logic lives in Tack.Core (the resolver, zone paths, version match, mini tack.yml parser). The
 // shim is a thin front-end: filename -> Resolver -> locate -> exec. It reads only the compiled resolved.json.
 
 try

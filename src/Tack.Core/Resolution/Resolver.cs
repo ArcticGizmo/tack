@@ -7,9 +7,9 @@ public enum ResolutionSource
     /// <summary>The exposed name isn't a registered tool binary.</summary>
     Unregistered,
     EnvOverride,
-    EnforceBinding,
+    EnforcedZone,
     TackYml,
-    Binding,
+    Zone,
     Default,
     /// <summary>Nothing resolved; the shim should fall through to the next binary on PATH (or error).</summary>
     Passthrough,
@@ -29,8 +29,8 @@ public sealed class Resolution
     public string? Detail { get; init; }
 
     /// <summary>True when a concrete, installed version was selected.</summary>
-    public bool Resolved => Source is ResolutionSource.EnvOverride or ResolutionSource.EnforceBinding
-        or ResolutionSource.TackYml or ResolutionSource.Binding or ResolutionSource.Default;
+    public bool Resolved => Source is ResolutionSource.EnvOverride or ResolutionSource.EnforcedZone
+        or ResolutionSource.TackYml or ResolutionSource.Zone or ResolutionSource.Default;
 }
 
 /// <summary>Pluggable environment access so the resolver is pure and unit-testable (no direct FS/env reads).</summary>
@@ -46,9 +46,9 @@ public sealed class ResolverContext
 /// <summary>
 /// The precedence engine (scope plan section 4). Highest wins:
 ///   1. env override  TACK_&lt;TOOL&gt;_VERSION
-///   2. enforced central binding      (org enforcement; beats a repo tack.yml)
+///   2. deepest enforced zone         (org enforcement; beats a repo tack.yml)
 ///   3. nearest tack.yml (walking up) that names the tool
-///   4. central binding (non-enforced)
+///   4. deepest zone (non-enforced)
 ///   5. central default
 ///   6. passthrough                    (or error, per settings)
 /// The front-ends (shim, CLI, UI) are thin over this; Core decides.
@@ -75,11 +75,11 @@ public sealed class Resolver
             return Select(exposedName, tool, rt, env.Trim(), ResolutionSource.EnvOverride,
                 $"TACK_{tool.ToUpperInvariant()}_VERSION");
 
-        // 2. Enforced binding (beats tack.yml).
-        var enforced = BestBinding(rt.Bindings, cwd, enforce: true);
+        // 2. Enforced zone (beats tack.yml).
+        var enforced = NearestZone(rt.Zones, cwd, enforce: true);
         if (enforced is not null)
-            return Select(exposedName, tool, rt, enforced.Version, ResolutionSource.EnforceBinding,
-                $"enforced binding {enforced.Glob}");
+            return Select(exposedName, tool, rt, enforced.Version, ResolutionSource.EnforcedZone,
+                $"enforced zone {enforced.Path}");
 
         // 3. Nearest tack.yml (walking up) that names this tool.
         foreach (var dir in WalkUp(cwd))
@@ -92,11 +92,10 @@ public sealed class Resolver
                 return Select(exposedName, tool, rt, v.Trim(), ResolutionSource.TackYml, path);
         }
 
-        // 4. Non-enforced binding.
-        var binding = BestBinding(rt.Bindings, cwd, enforce: false);
-        if (binding is not null)
-            return Select(exposedName, tool, rt, binding.Version, ResolutionSource.Binding,
-                $"binding {binding.Glob}");
+        // 4. Non-enforced zone.
+        var zone = NearestZone(rt.Zones, cwd, enforce: false);
+        if (zone is not null)
+            return Select(exposedName, tool, rt, zone.Version, ResolutionSource.Zone, $"zone {zone.Path}");
 
         // 5. Central default.
         if (!string.IsNullOrWhiteSpace(rt.Default))
@@ -137,22 +136,26 @@ public sealed class Resolver
         };
     }
 
-    private static ResolvedBinding? BestBinding(List<ResolvedBinding> bindings, string cwd, bool enforce)
+    // Zones that apply are cwd's ancestors, and ancestors nest - so the first hit walking up is the deepest,
+    // and there's never a tie to break.
+    private static ResolvedZone? NearestZone(List<ResolvedZone> zones, string cwd, bool enforce)
     {
-        ResolvedBinding? best = null;
-        foreach (var b in bindings)
-        {
-            if (b.Enforce != enforce) continue;
-            if (!Glob.IsMatch(b.Glob, cwd)) continue;
-            if (best is null || b.Specificity > best.Specificity) best = b;
-        }
-        return best;
+        if (zones.Count == 0) return null;
+        foreach (var dir in ZonePath.Ancestors(FullPath(cwd)))
+            foreach (var z in zones)
+                if (z.Enforce == enforce && string.Equals(z.Key, dir, StringComparison.Ordinal))
+                    return z;
+        return null;
+    }
+
+    private static string FullPath(string cwd)
+    {
+        try { return Path.GetFullPath(cwd); } catch { return cwd; }
     }
 
     private static IEnumerable<string> WalkUp(string cwd)
     {
-        string? dir;
-        try { dir = Path.GetFullPath(cwd); } catch { dir = cwd; }
+        string? dir = FullPath(cwd);
         while (!string.IsNullOrEmpty(dir))
         {
             yield return dir;

@@ -18,7 +18,7 @@ public sealed class DisableCommand : Command
             case GateAction.Disabled:
                 AnsiConsole.MarkupLine("[green]tack disabled.[/] Tools now fall through to the real PATH.");
                 AnsiConsole.MarkupLine($"[grey]shims parked at:[/] {Markup.Escape(result.Detail)}");
-                AnsiConsole.MarkupLine("[grey]tools add/remove, bind and use still work (they configure the parked dir); run [green]tack enable[/] to go live.[/]");
+                AnsiConsole.MarkupLine("[grey]tools, zones and use still work (they configure the parked dir); run [green]tack enable[/] to go live.[/]");
                 break;
             case GateAction.AlreadyDisabled:
                 AnsiConsole.MarkupLine("[yellow]already disabled.[/] Run [green]tack enable[/] to turn tack back on.");

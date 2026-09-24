@@ -55,7 +55,7 @@ public sealed class TackEnvironment
         return new ShimPayload { ShimExe = exe, SupportFiles = support };
     }
 
-    // Reshim into the ACTIVE dir so registering/binding keeps working while disabled (writes land in the
+    // Reshim into the ACTIVE dir so adding tools/zones keeps working while disabled (writes land in the
     // parked dir and go live on `tack enable`).
     public ReshimResult Reshim(CentralConfig config) => Reshimmer.Run(config, ActiveShimsDir, ResolvedJson, ShimPayload());
 }

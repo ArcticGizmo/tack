@@ -29,7 +29,7 @@ internal static class InstallHook
     }
 
     /// <summary>On uninstall: strip tack's PATH entries. User config + shims under %LOCALAPPDATA%\tack are
-    /// left in place, so a later reinstall keeps the registry/bindings the user built up.</summary>
+    /// left in place, so a later reinstall keeps the registry/zones the user built up.</summary>
     public static void Remove()
     {
         try { new WindowsPathInstaller().Unregister(); } catch { /* best-effort */ }

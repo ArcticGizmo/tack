@@ -210,8 +210,8 @@ public sealed class ToolsRemoveCommand : Command<ToolsRemoveSettings>
             AnsiConsole.MarkupLine($"[grey]dropped '{Markup.Escape(t)}' (no versions left)[/]");
         foreach (var r in result.DefaultsRepointed)
             AnsiConsole.MarkupLine($"[grey]default repointed:[/] {Markup.Escape(r)}");
-        foreach (var b in result.OrphanedBindings)
-            AnsiConsole.MarkupLine($"[yellow]binding now points at a removed version:[/] {Markup.Escape(b)} [grey](edit with tack bind / the UI)[/]");
+        foreach (var z in result.OrphanedZones)
+            AnsiConsole.MarkupLine($"[yellow]zone now points at a removed version:[/] {Markup.Escape(z)} [grey](edit with tack zones / the UI)[/]");
 
         Mutations.ReportReshim(env.Reshim(config));
         return 0;

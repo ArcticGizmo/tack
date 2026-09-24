@@ -25,15 +25,40 @@ public sealed class ConfigStoreTests : IDisposable
         {
             Tools = { ["node"] = new RegisteredTool { Versions = { ["20.11.0"] = new InstalledVersion { BinDir = @"C:\n20", Exposes = { "node", "npm" } } } } },
             Defaults = { ["node"] = "20.11.0" },
-            Bindings = { new Binding { Glob = "C:/work/**", Tools = { ["node"] = "20.11.0" } } },
+            Zones = { new Zone { Path = @"C:\work", Tool = "node", Version = "20.11.0", Enforce = true } },
         };
         store.Save(c);
 
         var loaded = store.Load();
         Assert.Equal(@"C:\n20", loaded.Tools["node"].Versions["20.11.0"].BinDir);
         Assert.Equal("20.11.0", loaded.Defaults["node"]);
-        Assert.Single(loaded.Bindings);
+        var z = Assert.Single(loaded.Zones);
+        Assert.Equal(@"C:\work", z.Path);
+        Assert.True(z.Enforce);
         Assert.Contains("npm", loaded.Tools["node"].Versions["20.11.0"].Exposes);
+        Assert.DoesNotContain("bindings", File.ReadAllText(store.Path)); // a clean config never writes the legacy key
+    }
+
+    [Fact]
+    public void Loading_a_pre_zones_config_migrates_its_bindings()
+    {
+        string path = Path.Combine(_dir, "config.json");
+        File.WriteAllText(path, """
+            {
+              "bindings": [
+                { "glob": "C:/work/**", "tools": { "node": "18" } },
+                { "glob": "C:/work/*/api/**", "tools": { "node": "20" } }
+              ]
+            }
+            """);
+        var store = new ConfigStore(path);
+
+        var loaded = store.Load();
+        Assert.Equal("C:/work", Assert.Single(loaded.Zones).Path);
+        Assert.Equal(new[] { "C:/work/*/api/**" }, ZoneRegistry.Unmigrated(loaded));
+
+        store.Save(loaded); // the unmigratable binding survives a save so doctor can keep naming it
+        Assert.Single(store.Load().Bindings!);
     }
 }
 

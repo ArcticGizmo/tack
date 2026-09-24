@@ -19,6 +19,8 @@ public sealed class ReshimResult
     /// <summary>True when the shim binary couldn't be found, so resolved.json was written but no shims stamped.</summary>
     public bool ShimPayloadMissing { get; init; }
     public IReadOnlyList<string> ShimNames { get; init; } = Array.Empty<string>();
+    /// <summary>Pre-zones binding globs that couldn't be migrated to zones, so resolution ignores them.</summary>
+    public IReadOnlyList<string> UnmigratedBindings { get; init; } = Array.Empty<string>();
 }
 
 /// <summary>
@@ -79,6 +81,7 @@ public static class Reshimmer
             ShimsPruned = pruned,
             ShimPayloadMissing = payloadMissing,
             ShimNames = names.ToList(),
+            UnmigratedBindings = ZoneRegistry.Unmigrated(config),
         };
     }
 }

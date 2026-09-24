@@ -116,6 +116,12 @@ public static class PathDoctor
                 if (!dirExists(iv.BinDir))
                     report.Add($"Missing binDir for {toolName}@{version}", CheckStatus.Fail, iv.BinDir);
 
+        // Pre-zones bindings with a mid-path wildcard: no single-directory equivalent, so they no longer apply.
+        foreach (var glob in ZoneRegistry.Unmigrated(config))
+            report.Add($"Binding '{glob}' no longer applies", CheckStatus.Fail,
+                "zones take a plain directory (everything under it is included); re-add it with " +
+                "'tack zones add <dir> tool@version' and delete it from the bindings list in config.json");
+
         if (names.Count == 0)
             report.Add("No tools registered", CheckStatus.Warn, "use 'tack tools add' to add an install");
 

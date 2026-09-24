@@ -16,54 +16,8 @@ internal static class Mutations
         else
             AnsiConsole.MarkupLine($"[grey]reshim:[/] {r.ShimsWritten} shim(s) written, {r.ShimsPruned} pruned"
                 + (r.ShimNames.Count > 0 ? $" [grey]({Markup.Escape(string.Join(", ", r.ShimNames))})[/]" : ""));
-    }
-}
-
-// ---- bind ----------------------------------------------------------------------------------------
-
-public sealed class BindSettings : CommandSettings
-{
-    [CommandArgument(0, "<glob>")]
-    [Description("A directory glob, e.g. C:/work/employer/**")]
-    public string Glob { get; init; } = "";
-
-    [CommandArgument(1, "<tool@version>")]
-    public string Spec { get; init; } = "";
-
-    [CommandOption("--enforce")]
-    [Description("Make this binding beat a repo tack.yml (org enforcement).")]
-    public bool Enforce { get; init; }
-
-    public override ValidationResult Validate()
-    {
-        if (string.IsNullOrWhiteSpace(Glob)) return ValidationResult.Error("A directory glob is required");
-        var s = ToolSpec.Parse(Spec);
-        if (string.IsNullOrEmpty(s.Tool) || string.IsNullOrEmpty(s.Version))
-            return ValidationResult.Error("Specify tool@version, e.g. node@18.19.0");
-        return ValidationResult.Success();
-    }
-}
-
-public sealed class BindCommand : Command<BindSettings>
-{
-    public override int Execute(CommandContext context, BindSettings settings)
-    {
-        var env = new TackEnvironment();
-        var spec = ToolSpec.Parse(settings.Spec);
-        var config = env.Load();
-
-        config.Bindings.Add(new Binding
-        {
-            Glob = settings.Glob,
-            Tools = { [spec.Tool] = spec.Version! },
-            Enforce = settings.Enforce,
-        });
-
-        env.Save(config);
-        AnsiConsole.MarkupLine($"[green]bound[/] {Markup.Escape(settings.Glob)} -> {Markup.Escape(spec.Tool)}@{Markup.Escape(spec.Version!)}"
-            + (settings.Enforce ? " [red](enforced)[/]" : ""));
-        Mutations.ReportReshim(env.Reshim(config));
-        return 0;
+        foreach (var glob in r.UnmigratedBindings)
+            AnsiConsole.MarkupLine($"[yellow]old binding '{Markup.Escape(glob)}' no longer applies[/] [grey](zones take a plain directory; see tack doctor)[/]");
     }
 }
 

@@ -89,14 +89,14 @@ public sealed class ToolRegistryTests
     }
 
     [Fact]
-    public void A_binding_pointing_at_a_removed_version_is_reported()
+    public void A_zone_pointing_at_a_removed_version_is_reported()
     {
         var c = TwoNodes();
-        c.Bindings.Add(new Binding { Glob = "C:/work/**", Tools = { ["node"] = "18.19.0" } });
+        c.Zones.Add(new Zone { Path = @"C:\work", Tool = "node", Version = "18.19.0" });
 
         var r = ToolRegistry.Remove(c, new[] { ("node", "18.19.0") });
 
-        Assert.Contains(r.OrphanedBindings, b => b.Contains("C:/work/**") && b.Contains("node@18.19.0"));
-        Assert.Single(c.Bindings); // bindings are warned about, not deleted
+        Assert.Contains(r.OrphanedZones, z => z.Contains(@"C:\work") && z.Contains("node@18.19.0"));
+        Assert.Single(c.Zones); // zones are warned about, not deleted
     }
 }

@@ -4,7 +4,7 @@ namespace Tack.App.ViewModels;
 
 /// <summary>
 /// The window shell. Owns one view model per screen and re-reads that screen's data whenever its tab is
-/// selected, so a change made on one tab (register a tool, add a binding, reshim) is reflected the moment you
+/// selected, so a change made on one tab (register a tool, add a zone, reshim) is reflected the moment you
 /// switch to a tab that depends on it - without cross-view-model coupling.
 /// </summary>
 public sealed class MainWindowViewModel : ViewModelBase
@@ -16,7 +16,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         Dashboard = new DashboardViewModel(services, dialogs);
         Inspector = new InspectorViewModel(services, dialogs);
         Registry = new RegistryViewModel(services, dialogs);
-        Bindings = new BindingsViewModel(services);
+        Zones = new ZonesViewModel(services);
         Path = new PathViewModel(services);
         Changelog = new ChangelogViewModel();
 
@@ -37,7 +37,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     public DashboardViewModel Dashboard { get; }
     public InspectorViewModel Inspector { get; }
     public RegistryViewModel Registry { get; }
-    public BindingsViewModel Bindings { get; }
+    public ZonesViewModel Zones { get; }
     public PathViewModel Path { get; }
     public ChangelogViewModel Changelog { get; }
 
@@ -57,7 +57,7 @@ public sealed class MainWindowViewModel : ViewModelBase
             case 0: Dashboard.Refresh(); break;
             case 1: Inspector.Inspect(); break;
             case 2: Registry.Refresh(); break;
-            case 3: Bindings.Refresh(); break;
+            case 3: Zones.Refresh(); break;
             case 4: Path.Refresh(); break;
             case 5: Changelog.Refresh(); break;
         }

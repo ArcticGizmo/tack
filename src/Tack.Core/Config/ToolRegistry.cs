@@ -5,11 +5,11 @@ public sealed record RemovalResult(
     IReadOnlyList<string> Removed,           // "node@20.11.0" entries actually removed
     IReadOnlyList<string> ToolsDropped,      // tool names left with no versions (dropped entirely)
     IReadOnlyList<string> DefaultsRepointed, // "node: 20.11.0 -> 18.19.0" when a default's version went away
-    IReadOnlyList<string> OrphanedBindings); // binding globs now pointing at a version that no longer exists
+    IReadOnlyList<string> OrphanedZones);    // zones now pointing at a version that no longer exists
 
 /// <summary>
 /// Read/mutate helpers over the central registry that the CLI's <c>tack tools</c> commands share. Pure (no
-/// filesystem), so removal - with its default-repointing and binding fallout - is unit-testable without disk.
+/// filesystem), so removal - with its default-repointing and zone fallout - is unit-testable without disk.
 /// </summary>
 public static class ToolRegistry
 {
@@ -35,7 +35,7 @@ public static class ToolRegistry
     /// <summary>
     /// Remove the given tool@version pairs (mutates <paramref name="config"/>). Drops any tool left with no
     /// versions (and its default), repoints a default whose version was removed to the highest remaining
-    /// version, and reports bindings left pointing at a version that no longer exists (bindings are not
+    /// version, and reports zones left pointing at a version that no longer exists (zones are not
     /// touched - the user is warned). Unknown targets are ignored. Matching is case-insensitive.
     /// </summary>
     public static RemovalResult Remove(CentralConfig config, IEnumerable<(string Tool, string Version)> targets)
@@ -75,15 +75,11 @@ public static class ToolRegistry
             }
         }
 
-        // Bindings that now point at a missing tool/version (warn only).
+        // Zones that now point at a missing tool/version (warn only).
         var orphaned = new List<string>();
-        foreach (var b in config.Bindings)
-            foreach (var (tool, version) in b.Tools)
-                if (!Exists(config, tool, version))
-                {
-                    orphaned.Add($"{b.Glob} ({tool}@{version})");
-                    break;
-                }
+        foreach (var z in config.Zones)
+            if (!Exists(config, z.Tool, z.Version))
+                orphaned.Add($"{z.Path} ({z.Tool}@{z.Version})");
 
         return new RemovalResult(removed, dropped, repointed, orphaned);
     }

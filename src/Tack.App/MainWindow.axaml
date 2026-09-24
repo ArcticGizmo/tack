@@ -46,7 +46,7 @@
           </Button>
           <Button Classes="nav" Command="{Binding SelectCommand}" CommandParameter="3">
             <Border Classes="navitem" Classes.active="{Binding SelectedTabIndex, Converter={StaticResource IntEq}, ConverterParameter=3}">
-              <TextBlock Text="Bindings" FontSize="14" Foreground="{DynamicResource FgBrush}" />
+              <TextBlock Text="Zones" FontSize="14" Foreground="{DynamicResource FgBrush}" />
             </Border>
           </Button>
           <Button Classes="nav" Command="{Binding SelectCommand}" CommandParameter="4">
@@ -71,7 +71,7 @@
       <views:DashboardView DataContext="{Binding Dashboard}" />
       <views:InspectorView DataContext="{Binding Inspector}" />
       <views:RegistryView DataContext="{Binding Registry}" />
-      <views:BindingsView DataContext="{Binding Bindings}" />
+      <views:ZonesView DataContext="{Binding Zones}" />
       <views:PathView DataContext="{Binding Path}" />
       <views:ChangelogView DataContext="{Binding Changelog}" />
     </Carousel>

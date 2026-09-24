@@ -4,7 +4,8 @@ namespace Tack.Core.Config;
 
 /// <summary>
 /// Loads and saves the central config (config.json). A missing file is an empty config, so first-run and
-/// the CLI's register/bind/use commands don't need special-casing. Written indented (via TackJson) since a
+/// the CLI's mutating commands don't need special-casing. Loading migrates pre-zones glob bindings in memory
+/// (<see cref="ZoneRegistry.Migrate"/>); the next save persists that. Written indented (via TackJson) since a
 /// human occasionally reads it.
 /// </summary>
 public sealed class ConfigStore
@@ -18,15 +19,18 @@ public sealed class ConfigStore
     public CentralConfig Load()
     {
         if (!File.Exists(_path)) return new CentralConfig();
+        CentralConfig config;
         try
         {
             using var fs = File.OpenRead(_path);
-            return JsonSerializer.Deserialize(fs, TackJson.Default.CentralConfig) ?? new CentralConfig();
+            config = JsonSerializer.Deserialize(fs, TackJson.Default.CentralConfig) ?? new CentralConfig();
         }
         catch (Exception ex)
         {
             throw new InvalidDataException($"config.json at {_path} could not be read: {ex.Message}", ex);
         }
+        ZoneRegistry.Migrate(config);
+        return config;
     }
 
     public void Save(CentralConfig config)

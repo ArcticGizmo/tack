@@ -45,9 +45,10 @@ static PATH entry, so they reach every process. That reach is the whole point of
 
 - **Per-directory dispatch that reaches processes tack didn't launch** (the IDE case). Shims on PATH.
 - **`tack.yml` project files**, discovered by walking up from the current directory.
-- **Centrally-managed bindings** so a directory can resolve to pinned versions *without* a `tack.yml`
-  living in the repo — for projects where you can't or won't commit tack config (no business buy-in).
-- **A rich `tack` CLI** (Spectre.Console) to administer bindings, register installs, and answer
+- **Centrally-managed zones** so a directory (and everything under it) can resolve to pinned versions
+  *without* a `tack.yml` living in the repo — for projects where you can't or won't commit tack config
+  (no business buy-in).
+- **A rich `tack` CLI** (Spectre.Console) to administer zones, register installs, and answer
   "what does `node` resolve to here and *why*" (`tack info`, `tack which`, `tack list`, `tack doctor`).
 - **A first-class desktop UI** (`tack open` / `tack ui`, Avalonia) for the same, because inspecting
   resolution and PATH health is genuinely nicer visually.
@@ -82,7 +83,7 @@ Multi-project solution, `tack.slnx`, projects under `src/`:
 | `src/Tack.Cli/` | `net10.0` | The `tack` command (assembly/exe name **`tack`**). Console app, Spectre.Console. This is what users type. |
 | `src/Tack.Shim/` | `net10.0` (NativeAOT) | **`tack-shim`** — the tiny proxy exe copied per shimmed tool. Same role/shape as perch's `perch-hook`: NativeAOT, minimal, fast cold start. |
 | `src/Tack.App/` | `net10.0-windows` + `net10.0` | The Avalonia desktop UI (**`tack-ui`**, WinExe). Launched by `tack open`. |
-| `tests/Tack.Tests/` | `net10.0` | xUnit over `Tack.Core`. Resolution precedence, walk-up, glob matching, shim planning. |
+| `tests/Tack.Tests/` | `net10.0` | xUnit over `Tack.Core`. Resolution precedence, walk-up, zone matching, shim planning. |
 
 Root: `install.ps1`, `.github/workflows/release.yml`, `publish.bat`, `docs/`.
 
@@ -103,7 +104,7 @@ All three are published into one directory and packed together by Velopack.
   current\                     # Velopack-managed install (tack.exe, tack-ui.exe, tack-shim.exe)
   shims\                       # <-- this dir goes on PATH; one *.exe per exposed tool binary
     node.exe  npm.exe  npx.exe  python.exe  ...
-  config.json                  # central config: registry + bindings + defaults (tool-managed, JSON)
+  config.json                  # central config: registry + zones + defaults (tool-managed, JSON)
   resolved.json                # compiled fast-lookup the shim reads (regenerated on config change)
   log\                         # optional shim/CLI diagnostics
 ```
@@ -125,8 +126,10 @@ Project files: `tack.yml` committed (or not) in a project tree, discovered by wa
   - **registry** — `tool@version → { binDir, exposes: [names] }`: where each *installed* version lives
     and which executables it provides. This is the "shim things tack didn't install" surface: you
     register an existing install here.
-  - **bindings** — `directoryGlob → { tool: version, … }`: the **centrally-managed** rules that apply
-    without a `tack.yml` in the repo.
+  - **zones** — `{ path, tool, version, enforce }`: the **centrally-managed** rules that apply without a
+    `tack.yml` in the repo. A zone is a plain absolute directory covering itself and everything under it,
+    keyed by (path, tool) so two zones can never disagree about the same tool in the same place. (Zones
+    replaced the original glob "bindings"; see 4.)
   - **defaults** — global fallback versions.
 
 **Why the format split matters (this is load-bearing for the shim).** The shim is NativeAOT, so it
@@ -151,16 +154,26 @@ of `T` by this precedence, **highest wins**:
 
 1. **Env override** — `TACK_<TOOL>_VERSION` (e.g. `TACK_NODE_VERSION=18.19.0`). The escape hatch / CI pin.
 2. **Nearest `tack.yml`** walking up from `D` to the drive root. Explicit project intent.
-3. **Central binding** — the most specific matching `directoryGlob` in `config.json`. This is the
-   "managed without a repo file" path: work under `C:\work\employer\**` resolves to their pinned
-   versions even though nothing was committed to their repos.
+3. **Central zone** — the deepest zone in `config.json` containing `D`. This is the "managed without a
+   repo file" path: work under `C:\work\employer` resolves to their pinned versions even though nothing
+   was committed to their repos.
 4. **Central default** for `T`.
 5. **Passthrough** — if nothing resolves, exec the *next* `X` on PATH after the shims dir (configurable;
    see below). tack stays invisible where it isn't configured.
 
+**Why zones are plain directories, not globs.** Every zone that applies to `D` is one of `D`'s ancestors,
+and ancestors nest, so "most specific wins" falls out of the tree: the first zone found walking up from
+`D` wins, with no scoring and no possible tie. The original design used directory globs ranked by a
+literal-prefix "specificity", which let `C:/work/*/api/**` and `C:/work/**` tie (first in the file won,
+silently) and meant building a regex per rule on every shim call. The only thing lost is mid-path
+wildcards (`C:/work/*-legacy/**`), which are rare and covered by one zone per directory or a `tack.yml`.
+Matching compares normalized paths (case- and separator-insensitive) by whole segment, so `C:\work` never
+matches `C:\workshop`. Old glob bindings migrate on load (`X/**` and bare `X` → a zone at `X`); a glob
+with a mid-path wildcard is left in place, ignored, and flagged by `tack doctor`.
+
 **Precedence decision to confirm (see Open decisions):** default is `tack.yml` **beats** a central
-binding — a committed project file is a stronger statement of intent than a machine-wide rule. An org
-that wants to *enforce* a version regardless can mark a binding `enforce: true` to lift it above
+zone — a committed project file is a stronger statement of intent than a machine-wide rule. An org
+that wants to *enforce* a version regardless can mark a zone `enforce: true` to lift it above
 `tack.yml`. v1 ships the `tack.yml`-wins default; `enforce` is a small later addition.
 
 **No-resolution behaviour** is configurable, default = **passthrough**. Rationale: it matches the whole
@@ -321,19 +334,19 @@ Console app, assembly name `tack`. Spectre.Console for tables, trees, prompts, s
 
 | Command | Does |
 | --- | --- |
-| `tack info [tool]` | The headline diagnostic. With a tool: resolved version **and the source** (which `tack.yml` / binding / default), plus the absolute binary it'd exec. With no tool: a Spectre table of every managed tool → resolved version → source, for the current directory. |
+| `tack info [tool]` | The headline diagnostic. With a tool: resolved version **and the source** (which `tack.yml` / zone / default), plus the absolute binary it'd exec. With no tool: a Spectre table of every managed tool → resolved version → source, for the current directory. |
 | `tack which <tool>` | Print just the absolute path the shim would exec (scriptable; like `mise which`). |
 | `tack list` / `tack ls` | Registered tools and versions; marks which are shimmed and which resolve here. |
 | `tack shims` | List generated shims + target dir; PATH-ordering health line. |
 | `tack use <tool>@<ver>` | Write/update `tack.yml` in the current dir. Interactive (Spectre `SelectionPrompt`) when the version is omitted — pick from registered versions. |
 | `tack register <tool>@<ver> --path <binDir> [--exposes a,b,c]` | Add an existing install to the central registry (the "dispatch to something tack didn't install" case). |
-| `tack bind <dirGlob> <tool>@<ver> [--enforce]` | Add a central directory binding (managed without a repo `tack.yml`). |
+| `tack zones add <dir> <tool>@<ver> [--enforce]` / `zones remove [dir] [tool]` / `zones list` | Manage central zones (managed without a repo `tack.yml`). `add` upserts by (dir, tool); `remove` with no args is an interactive picker. Replaced the original `tack bind <dirGlob>`. |
 | `tack reshim` | Regenerate shims + `resolved.json`. Spectre status spinner. |
 | `tack doctor` | Diagnose: shims dir on PATH? ahead of shadowers (nvm-windows…)? stale shims? missing binDirs? Renders as a checklist. |
 | `tack open` / `tack ui` | Launch `tack-ui.exe`. |
 
 Spectre specifics to lean on: `Table`/`Tree` for `info` (render the resolution chain as a tree —
-override → tack.yml → binding → default), `SelectionPrompt`/`MultiSelectionPrompt` for interactive
+override → tack.yml → zone → default), `SelectionPrompt`/`MultiSelectionPrompt` for interactive
 `use`/`register`, `Status`/`Progress` for `reshim`, `Panel` + `Markup` colour for `doctor` verdicts.
 Bare `tack` with no args can drop into an interactive menu.
 
@@ -354,7 +367,7 @@ Screens (v1):
 - **Directory inspector** — pick a folder; see exactly what tack resolves there and the winning rule.
   This is the "why is Visual Studio using the wrong Node?" debugger, made obvious.
 - **Registry editor** — register installs, set `binDir`, edit `exposes`.
-- **Bindings editor** — the central `dirGlob → versions` rules (the no-repo-file managed set).
+- **Zones editor** — the central `directory → tool@version` rules (the no-repo-file managed set).
 - **PATH doctor** — visualise PATH entries, highlight what shadows the shims dir, one-click fix ordering.
 - **Shims panel** — view/regenerate; flag stale shims.
 
@@ -417,7 +430,9 @@ Ordered so there's a usable thing early and the risky part (the shim) is proven 
   doctor.
 - **M5 — Distribution hardening.** `install.ps1` + `SHA256SUMS.txt` + `release.yml`, ported test-install
   suite, first-run PATH/shim wiring on install.
-- **Later.** `enforce` bindings; shell-activation convenience; macOS/Linux heads; version *installation*
+- **Since.** Glob bindings (M2–M4) were replaced by plain-directory zones: `tack bind` → `tack zones`,
+  and the UI's Bindings editor → Zones (see 3.3 and 4).
+- **Later.** `enforce` zones; shell-activation convenience; macOS/Linux heads; version *installation*
   backends; central-config sync; **dependent / global bins (5.5) and stamp-based auto-reshim (5.6)**;
   signing + WinGet.
 
@@ -442,8 +457,8 @@ Ordered so there's a usable thing early and the risky part (the shim) is proven 
 
 ## 11. Open decisions (confirm before/while building)
 
-1. **`tack.yml` vs central binding precedence.** Recommended default: `tack.yml` wins; `enforce: true`
-   lifts a central binding above it. Confirm this matches how you want org-managed dirs to behave.
+1. **`tack.yml` vs central zone precedence.** Recommended default: `tack.yml` wins; `enforce: true`
+   lifts a central zone above it. Confirm this matches how you want org-managed dirs to behave.
 2. **No-resolution behaviour.** Recommended default: passthrough to next-on-PATH (tack invisible where
    unconfigured). Alternative: error. Per-tool or global setting?
 3. **Repo owner / URL for `install.ps1`.** perch uses `raw.githubusercontent.com/<owner>/<repo>/main/…`.

@@ -36,8 +36,16 @@ app.Configure(cfg =>
         .WithDescription("Turn tack off: park the shims dir so tools fall through to the real PATH.");
     cfg.AddCommand<EnableCommand>("enable")
         .WithDescription("Turn tack back on after 'tack disable'.");
-    cfg.AddCommand<BindCommand>("bind")
-        .WithDescription("Add a central directory binding (managed without a repo tack.yml).");
+    cfg.AddBranch<CommandSettings>("zones", zones =>
+    {
+        zones.SetDescription("Manage zones: directories (and everything under them) that use a tool version without a repo tack.yml.");
+        zones.AddCommand<ZonesAddCommand>("add")
+            .WithDescription("Add or update a zone: this directory and everything under it use tool@version.");
+        zones.AddCommand<ZonesRemoveCommand>("remove")
+            .WithDescription("Remove zones (interactive picker when no directory is given).");
+        zones.AddCommand<ZonesListCommand>("list")
+            .WithDescription("List zones.");
+    });
     cfg.AddCommand<UseCommand>("use")
         .WithDescription("Pin a tool version in this directory (writes tack.yml).");
     cfg.AddCommand<OpenCommand>("open").WithAlias("ui")

@@ -5,7 +5,7 @@ namespace Tack.Core.Config;
 /// <summary>
 /// Compiles the human/tool-authored <see cref="CentralConfig"/> (config.json) into the flat, shim-facing
 /// <see cref="ResolvedConfig"/> (resolved.json): builds the exposed-name -> owning-tool index, splits the
-/// shared bindings list per tool with a precomputed specificity, and carries defaults + settings across.
+/// zones list per tool with a precomputed match key, and carries defaults + settings across.
 /// Run by the CLI/UI whenever central config changes; the shim only ever reads the output.
 /// </summary>
 public static class ConfigCompiler
@@ -29,25 +29,18 @@ public static class ConfigCompiler
             rc.Tools[toolName] = rt;
         }
 
-        foreach (var b in c.Bindings)
+        // Sorted for deterministic output; the resolver doesn't depend on the order.
+        foreach (var z in ZoneRegistry.Sorted(c))
         {
-            int specificity = Glob.Specificity(b.Glob);
-            foreach (var (toolName, version) in b.Tools)
+            if (!rc.Tools.TryGetValue(z.Tool, out var rt)) continue;
+            rt.Zones.Add(new ResolvedZone
             {
-                if (!rc.Tools.TryGetValue(toolName, out var rt)) continue;
-                rt.Bindings.Add(new ResolvedBinding
-                {
-                    Glob = b.Glob,
-                    Version = version,
-                    Enforce = b.Enforce,
-                    Specificity = specificity,
-                });
-            }
+                Path = z.Path,
+                Key = ZonePath.Normalize(z.Path),
+                Version = z.Version,
+                Enforce = z.Enforce,
+            });
         }
-
-        // Deterministic output: most-specific first (the resolver also selects the max).
-        foreach (var rt in rc.Tools.Values)
-            rt.Bindings.Sort((x, y) => y.Specificity.CompareTo(x.Specificity));
 
         return rc;
     }

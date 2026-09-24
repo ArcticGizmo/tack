@@ -48,11 +48,10 @@ public sealed class ToolVersionRow
     public IBrush BinDirBrush => BinDirExists ? Presentation.Muted : Presentation.Fail;
 }
 
-/// <summary>One central directory binding, for the bindings editor.</summary>
-public sealed class BindingRow
+/// <summary>One central zone, for the zones editor.</summary>
+public sealed class ZoneRow
 {
-    public required int Index { get; init; }
-    public required string Glob { get; init; }
+    public required string Path { get; init; }
     public required string Tool { get; init; }
     public required string Version { get; init; }
     public bool Enforce { get; init; }

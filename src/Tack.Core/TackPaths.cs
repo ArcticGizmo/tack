@@ -49,7 +49,7 @@ public static class TackPaths
         }
     }
 
-    /// <summary>Central, tool-managed config: registry + bindings + defaults (JSON).</summary>
+    /// <summary>Central, tool-managed config: registry + zones + defaults (JSON).</summary>
     public static string ConfigJson => Path.Combine(Root, "config.json");
 
     /// <summary>Compiled fast-lookup the shim reads (regenerated on config change).</summary>
