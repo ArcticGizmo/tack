@@ -57,20 +57,45 @@ In a **dev** profile `--fix` reshims but skips PATH promotion (dev shims are int
 | --- | --- |
 | Enable/disable + active-dir logic | `Tack.Core.Maintenance.ShimGate` |
 | Parked-dir path | `TackPaths.DisabledShimsDir` (`...\shims_disabled`) |
-| Machine-PATH arithmetic (pure) | `Tack.Core.Platform.MachinePathPlanner` |
-| The admin-gated PATH write + broadcast | `WindowsPathInstaller.PromoteToMachineFront()` |
+| Machine-PATH arithmetic (pure) | `Tack.Core.Platform.PathEdits` (`PrependFront`, `Remove`) |
+| Raw registry read / EXPAND_SZ write | `Tack.Core.Platform.WindowsEnvRegistry` |
+| The admin-gated PATH ops + broadcast | `WindowsPathInstaller.PrependShimsToMachinePath()` / `.StripShimsFromUserPath()` |
 | Admin check + UAC relaunch | `Tack.Cli.Elevation` |
+| Before/after backup file | `Tack.Cli.PathFixBackup` |
 | Commands | `DisableCommand`, `EnableCommand`, `DoctorCommand --fix`, hidden `ApplyMachinePathCommand` |
 | Disabled-aware reporting | `PathDoctor.Run(..., activeShimsDir, disabled)`, `ShimsCommand`, `RegisterCommand` |
 
 ## Tests
 
 `ShimGateTests` (park/restore, idempotency, stray-empty reclaim, non-empty conflict, active-dir selection),
-`MachinePathPlannerTests` (prepend, move-to-front, no-op when already leading, case/trailing-slash matching),
-`PathDoctorDisabledTests` (reports disabled, skips the on-PATH failure). **9 new tests; 67 total, all green.**
+`PathEditsTests` (prepend, move-to-front, no-op when already leading, case/trailing-slash matching, **token
+preservation**, remove), `PathDoctorDisabledTests` (reports disabled, skips the on-PATH failure).
+
+## Update (2026-09-24): token-preserving rewrite + before/after backup
+
+The first cut read the machine PATH via `Environment.GetEnvironmentVariable` (which returns it **expanded**) and
+wrote it back with `SetEnvironmentVariable` - which would have collapsed `%SystemRoot%\system32` / `%NVM_HOME%`
+into literal paths and flipped the value from `REG_EXPAND_SZ` to `REG_SZ` across the whole machine PATH. Fixed:
+
+- **`WindowsEnvRegistry`** reads and writes the PATH values in the registry directly (P/Invoke to `advapi32`, so
+  Tack.Core stays dependency-free for the AOT shim): raw read (no expansion), write back as `REG_EXPAND_SZ`.
+- **`PathEdits`** does the add/remove on *raw* entries, comparing by an injected expander so a token and its
+  expansion count as the same dir, while every untouched entry is emitted byte-for-byte as stored.
+- The **user-PATH cleanup runs as the real user**, and only **after** the machine write succeeds - so a declined
+  UAC never leaves the shims dir on neither PATH, and an elevated *different* admin account never edits the
+  wrong user's HKCU.
+- **`PathFixBackup`** prints the full before/after and writes a timestamped JSON backup under the tack data dir
+  (`path-backups\path-fix-*.json`), doubling as the channel that carries the machine before/after out of the
+  short-lived elevated child back to the parent's console. This is the manual-revert safety net while the
+  rewrite earns trust.
+
+Verified on this machine (read-only): `WindowsEnvRegistry.ReadRaw` returns the exact tokens
+(`%SystemRoot%\system32`, `%NVM_HOME%`, ...), and a dry-run of `PathEdits.PrependFront` over the real machine
+PATH prepends the shims dir with all 7 tokens intact. **7 new/updated PATH tests; 86 total, all green.**
 
 ## Not verified here
 
-The live machine-PATH promotion and the UAC relaunch aren't exercised in this environment - it would mean a
-real elevated write to the system PATH on a managed EDR box. The PATH computation is covered by
-`MachinePathPlanner` unit tests; the elevation glue is thin. Worth a manual confirm on a release build.
+The actual `REG_EXPAND_SZ` **write** and the UAC relaunch aren't exercised - both need a real elevated write to
+the system PATH on a managed EDR box. Read + edit are proven against live data; the write is a single
+`RegSetValueEx`, and the before/after print + backup file exist precisely so a first real run is recoverable.
+Worth a manual confirm on a release build.

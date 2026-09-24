@@ -82,44 +82,65 @@ public sealed class ShimGateTests : IDisposable
     }
 }
 
-public sealed class MachinePathPlannerTests
+public sealed class PathEditsTests
 {
     private const string Shims = @"C:\Users\me\AppData\Local\tack\shims";
 
     [Fact]
-    public void Prepends_to_machine_and_strips_from_user()
+    public void PrependFront_moves_shims_to_the_front()
     {
-        var plan = MachinePathPlanner.PlaceFront(
-            machinePath: @"C:\Windows;C:\Program Files\nodejs",
-            userPath: $@"{Shims};C:\Users\me\bin",
-            shimsDir: Shims);
-
-        Assert.Equal($@"{Shims};C:\Windows;C:\Program Files\nodejs", plan.NewMachinePath);
-        Assert.Equal(@"C:\Users\me\bin", plan.NewUserPath); // shims removed from user PATH
+        var result = PathEdits.PrependFront(@"C:\Windows;C:\Program Files\nodejs", Shims);
+        Assert.Equal($@"{Shims};C:\Windows;C:\Program Files\nodejs", result);
     }
 
     [Fact]
-    public void Moves_shims_to_the_front_when_it_was_lower_in_machine_path()
+    public void PrependFront_dedupes_when_shims_was_lower_in_path()
     {
-        var plan = MachinePathPlanner.PlaceFront($@"C:\Windows;{Shims}", null, Shims);
-        Assert.Equal($@"{Shims};C:\Windows", plan.NewMachinePath);
-        Assert.False(plan.UserChanged);
+        var result = PathEdits.PrependFront($@"C:\Windows;{Shims}", Shims);
+        Assert.Equal($@"{Shims};C:\Windows", result);
     }
 
     [Fact]
-    public void No_change_when_shims_already_leads_and_absent_from_user()
+    public void PrependFront_returns_null_when_shims_already_leads()
     {
-        var plan = MachinePathPlanner.PlaceFront($@"{Shims};C:\Windows", @"C:\Users\me\bin", Shims);
-        Assert.False(plan.AnyChange);
-        Assert.Null(plan.NewMachinePath);
-        Assert.Null(plan.NewUserPath);
+        Assert.Null(PathEdits.PrependFront($@"{Shims};C:\Windows", Shims));
     }
 
     [Fact]
-    public void Matches_paths_case_insensitively_and_ignores_trailing_slashes()
+    public void PrependFront_matches_case_insensitively_and_ignores_trailing_slashes()
     {
-        var plan = MachinePathPlanner.PlaceFront($@"C:\Windows;{Shims.ToUpperInvariant()}\", null, Shims);
-        Assert.Equal($@"{Shims};C:\Windows", plan.NewMachinePath);
+        var result = PathEdits.PrependFront($@"C:\Windows;{Shims.ToUpperInvariant()}\", Shims);
+        Assert.Equal($@"{Shims};C:\Windows", result);
+    }
+
+    [Fact]
+    public void PrependFront_preserves_env_tokens_of_untouched_entries()
+    {
+        // %SystemRoot% must survive verbatim; only the shims dir is added. The expander is injected so the
+        // comparison knows %SystemRoot%\system32 and C:\WINDOWS\system32 are the same dir.
+        string expand(string p) => p.Replace("%SystemRoot%", @"C:\WINDOWS", StringComparison.OrdinalIgnoreCase);
+        var result = PathEdits.PrependFront(@"%SystemRoot%\system32;%SystemRoot%", Shims, expand);
+        Assert.Equal($@"{Shims};%SystemRoot%\system32;%SystemRoot%", result); // tokens intact
+    }
+
+    [Fact]
+    public void PrependFront_is_a_noop_even_when_a_tokenised_entry_already_leads()
+    {
+        string expand(string p) => p.Replace("%TACK_SHIMS%", Shims, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(PathEdits.PrependFront($@"%TACK_SHIMS%;C:\Windows", Shims, expand));
+    }
+
+    [Fact]
+    public void Remove_strips_shims_and_keeps_the_rest_verbatim()
+    {
+        var result = PathEdits.Remove($@"{Shims};%NVM_HOME%;C:\Users\me\bin", Shims);
+        Assert.Equal(@"%NVM_HOME%;C:\Users\me\bin", result); // token preserved, shims gone
+    }
+
+    [Fact]
+    public void Remove_returns_null_when_shims_is_absent()
+    {
+        Assert.Null(PathEdits.Remove(@"%NVM_HOME%;C:\Users\me\bin", Shims));
     }
 }
 

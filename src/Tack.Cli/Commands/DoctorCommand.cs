@@ -83,52 +83,102 @@ public sealed class DoctorCommand : Command<DoctorSettings>
     [SupportedOSPlatform("windows")]
     private static void PromoteMachinePath()
     {
+        var installer = new WindowsPathInstaller();
+        string backup = PathFixBackup.NewPath();
+
+        // 1. Machine PATH (needs admin) FIRST - so a declined UAC never leaves the shims dir on neither PATH.
+        PathChange? machine;
         if (Elevation.IsAdministrator())
         {
             try
             {
-                bool changed = new WindowsPathInstaller().PromoteToMachineFront();
-                AnsiConsole.MarkupLine(changed
-                    ? "[green]shims dir promoted to the front of the system PATH.[/] Open a new terminal to pick it up."
-                    : "[grey]shims dir already leads the system PATH.[/]");
+                machine = installer.PrependShimsToMachinePath();
             }
             catch (Exception ex)
             {
                 AnsiConsole.MarkupLine($"[red]couldn't update the system PATH:[/] {Markup.Escape(ex.Message)}");
+                return;
             }
+        }
+        else
+        {
+            AnsiConsole.MarkupLine("[grey]editing the system PATH needs elevation; prompting for admin...[/]");
+            try { Directory.CreateDirectory(Path.GetDirectoryName(backup)!); } catch { /* Save() reports if it can't write */ }
+
+            switch (Elevation.RelaunchElevated($"apply-machine-path \"{backup}\""))
+            {
+                case Elevation.RelaunchOutcome.Cancelled:
+                    AnsiConsole.MarkupLine("[yellow]elevation declined; PATH not changed.[/]");
+                    return;
+                case Elevation.RelaunchOutcome.Failed:
+                    AnsiConsole.MarkupLine("[red]elevated PATH update failed.[/] Try running [green]tack doctor --fix[/] from an elevated terminal.");
+                    return;
+            }
+            machine = PathFixBackup.ReadMachine(backup); // the elevated child recorded it (null if it already led)
+        }
+
+        // 2. The shims dir now leads the machine PATH, so drop the redundant user-PATH copy - as THIS (the real)
+        //    user, never in the elevated child, which may be a different admin account.
+        PathChange? user = null;
+        try { user = installer.StripShimsFromUserPath(); }
+        catch (Exception ex) { AnsiConsole.MarkupLine($"[yellow]note:[/] couldn't tidy the user PATH: {Markup.Escape(ex.Message)}"); }
+
+        string? saved = PathFixBackup.Save(backup, user, machine);
+        ReportPathChange(user, machine, saved);
+    }
+
+    private static void ReportPathChange(PathChange? user, PathChange? machine, string? backup)
+    {
+        if (user is null && machine is null)
+        {
+            AnsiConsole.MarkupLine("[grey]PATH already correct; nothing changed.[/]");
             return;
         }
 
-        AnsiConsole.MarkupLine("[grey]editing the system PATH needs elevation; prompting for admin...[/]");
-        switch (Elevation.RelaunchElevated("apply-machine-path"))
-        {
-            case Elevation.RelaunchOutcome.Succeeded:
-                AnsiConsole.MarkupLine("[green]system PATH updated (elevated).[/] Open a new terminal to pick it up.");
-                break;
-            case Elevation.RelaunchOutcome.Cancelled:
-                AnsiConsole.MarkupLine("[yellow]elevation declined; system PATH not changed.[/]");
-                break;
-            default:
-                AnsiConsole.MarkupLine("[red]elevated PATH update failed.[/] Try running [green]tack doctor --fix[/] from an elevated terminal.");
-                break;
-        }
+        AnsiConsole.MarkupLine("[green]PATH updated[/] [grey](%VAR% tokens preserved)[/] - open a new terminal to pick it up.");
+        if (backup is not null)
+            AnsiConsole.MarkupLine($"[grey]backup (for manual revert):[/] {Markup.Escape(backup)}");
+
+        PrintScope(machine);
+        PrintScope(user);
+    }
+
+    // Plain Console.WriteLine for the PATH values - they hold %, ; and [ that Spectre markup would mangle, and
+    // the whole point is to show them verbatim so they can be pasted back if needed.
+    private static void PrintScope(PathChange? c)
+    {
+        if (c is null) return;
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"[grey]{c.Scope} PATH before:[/]");
+        Console.WriteLine(c.Before);
+        AnsiConsole.MarkupLine($"[grey]{c.Scope} PATH after:[/]");
+        Console.WriteLine(c.After);
     }
 }
 
-/// <summary>
-/// Hidden helper: the single elevated step of <c>tack doctor --fix</c>. Launched via a UAC relaunch so the
-/// admin-only machine-PATH write happens in a short-lived elevated process rather than running all of tack as
-/// admin. Not meant to be invoked directly.
-/// </summary>
-public sealed class ApplyMachinePathCommand : Command
+public sealed class ApplyMachinePathSettings : CommandSettings
 {
-    public override int Execute(CommandContext context)
+    [CommandArgument(0, "[backupPath]")]
+    public string? BackupPath { get; init; }
+}
+
+/// <summary>
+/// Hidden helper: the single elevated step of <c>tack doctor --fix</c> - prepend the shims dir to the machine
+/// PATH. Launched via a UAC relaunch so the admin-only write happens in a short-lived elevated process rather
+/// than running all of tack as admin. It records the before/after to the given backup file so the parent (whose
+/// console outlives this one) can display and keep it. Not meant to be invoked directly.
+/// </summary>
+public sealed class ApplyMachinePathCommand : Command<ApplyMachinePathSettings>
+{
+    public override int Execute(CommandContext context, ApplyMachinePathSettings settings)
     {
         if (!OperatingSystem.IsWindows())
             return 1;
         try
         {
-            new WindowsPathInstaller().PromoteToMachineFront();
+            var machine = new WindowsPathInstaller().PrependShimsToMachinePath();
+            if (!string.IsNullOrEmpty(settings.BackupPath))
+                PathFixBackup.Save(settings.BackupPath, user: null, machine: machine);
             return 0;
         }
         catch (Exception ex)

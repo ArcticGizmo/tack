@@ -60,32 +60,37 @@ public sealed class WindowsPathInstaller : IPathInstaller
     }
 
     /// <summary>
-    /// Promote the shims dir to the very front of the MACHINE PATH (and strip a now-redundant copy from the
-    /// user PATH), so it beats system-wide tool installs that a user-PATH entry can't - this is what
-    /// <c>tack doctor --fix</c> runs. Writing the machine PATH needs admin: unelevated it throws
-    /// <see cref="System.Security.SecurityException"/>, which the caller turns into a UAC relaunch. Returns
-    /// true if anything changed. Idempotent - a no-op once the shims dir already leads the machine PATH.
+    /// Move the shims dir to the very front of the MACHINE PATH so it beats system-wide tool installs a
+    /// user-PATH entry can't - the core of <c>tack doctor --fix</c>. Reads and writes the raw registry value so
+    /// %VAR% tokens survive, and returns the before/after (null when it already led and nothing was written).
+    /// Writing HKLM needs admin: unelevated it throws (ERROR_ACCESS_DENIED), which the caller turns into a UAC
+    /// relaunch.
     /// </summary>
-    public bool PromoteToMachineFront()
+    public PathChange? PrependShimsToMachinePath()
     {
-        Directory.CreateDirectory(_shimsDir);
+        string before = WindowsEnvRegistry.ReadRaw(machine: true);
+        string? after = PathEdits.PrependFront(before, _shimsDir);
+        if (after is null) return null;
 
-        var plan = MachinePathPlanner.PlaceFront(
-            Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine),
-            Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User),
-            _shimsDir);
-
-        if (!plan.AnyChange) return false;
-
-        // Machine first: it's the privileged, load-bearing write. If it throws (not elevated) we haven't
-        // touched the user PATH, so nothing is left half-done.
-        if (plan.MachineChanged)
-            Environment.SetEnvironmentVariable("PATH", plan.NewMachinePath, EnvironmentVariableTarget.Machine);
-        if (plan.UserChanged)
-            Environment.SetEnvironmentVariable("PATH", plan.NewUserPath, EnvironmentVariableTarget.User);
-
+        WindowsEnvRegistry.WriteExpand(machine: true, after);
         Broadcast();
-        return true;
+        return new PathChange("machine", before, after);
+    }
+
+    /// <summary>
+    /// Remove the now-redundant shims entry from the USER PATH (raw read/write, tokens preserved). Runs against
+    /// the CURRENT user's HKCU, so callers must run this as the real user - never in an elevated child that may
+    /// be a different account. Returns the before/after, or null if the shims dir wasn't on the user PATH.
+    /// </summary>
+    public PathChange? StripShimsFromUserPath()
+    {
+        string before = WindowsEnvRegistry.ReadRaw(machine: false);
+        string? after = PathEdits.Remove(before, _shimsDir);
+        if (after is null) return null;
+
+        WindowsEnvRegistry.WriteExpand(machine: false, after);
+        Broadcast();
+        return new PathChange("user", before, after);
     }
 
     private static List<string> Split(string pathVar) =>
