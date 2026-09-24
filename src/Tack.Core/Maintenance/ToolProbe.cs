@@ -1,7 +1,7 @@
 namespace Tack.Core.Maintenance;
 
 /// <summary>
-/// Auto-detects the executables a version's binDir provides (for `tack register` without an explicit
+/// Auto-detects the executables a version's binDir provides (for `tack tools add` without an explicit
 /// --exposes). Scans for the Windows exec extensions and returns distinct basenames.
 /// </summary>
 public static class ToolProbe

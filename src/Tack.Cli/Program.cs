@@ -20,8 +20,16 @@ app.Configure(cfg =>
         .WithDescription("Show the resolved version and source for a tool in this directory.");
     cfg.AddCommand<WhichCommand>("which")
         .WithDescription("Print the absolute path a tool resolves to (scriptable).");
-    cfg.AddCommand<ListCommand>("list").WithAlias("ls")
-        .WithDescription("List registered tools and versions.");
+    cfg.AddBranch<CommandSettings>("tools", tools =>
+    {
+        tools.SetDescription("Manage the central tool registry (add, remove, list).");
+        tools.AddCommand<ToolsAddCommand>("add")
+            .WithDescription("Register an existing tool install in the central registry.");
+        tools.AddCommand<ToolsRemoveCommand>("remove")
+            .WithDescription("Remove tool versions (interactive picker when no version is given).");
+        tools.AddCommand<ToolsListCommand>("list")
+            .WithDescription("List registered tools and versions.");
+    });
     cfg.AddCommand<ShimsCommand>("shims")
         .WithDescription("List generated shims and PATH health.");
     cfg.AddCommand<DoctorCommand>("doctor")
@@ -30,8 +38,6 @@ app.Configure(cfg =>
         .WithDescription("Turn tack off: park the shims dir so tools fall through to the real PATH.");
     cfg.AddCommand<EnableCommand>("enable")
         .WithDescription("Turn tack back on after 'tack disable'.");
-    cfg.AddCommand<RegisterCommand>("register")
-        .WithDescription("Register an existing tool install in the central registry.");
     cfg.AddCommand<BindCommand>("bind")
         .WithDescription("Add a central directory binding (managed without a repo tack.yml).");
     cfg.AddCommand<UseCommand>("use")

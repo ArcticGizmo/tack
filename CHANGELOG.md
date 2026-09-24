@@ -13,9 +13,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Configuration keeps working while disabled: `register`, `bind` and `reshim` write into the parked dir, so whatever you set up meanwhile goes live the moment you `tack enable`.
 - `tack doctor --fix` - stop reading the diagnosis and just fix it. Regenerates shims, then promotes the shims dir to the **front of the system (machine) PATH** so it beats system-wide installs a user-PATH entry can never outrank. Prompts for elevation via UAC when it needs it (and only for that one write).
 
+- `tack tools` command group - `add`, `remove`, `list`. `tools remove` with no version drops you into an interactive, scrolling multi-select of the registered versions (give it a tool name to filter the picker to just that tool's versions; give a full `tool@version` to remove it outright). Removing a version tidies up after itself: it drops a tool left with nothing, repoints a default whose version just vanished, and warns about any binding left pointing at the removed version.
+
 ### Changed
 
 - `tack doctor` and `tack shims` now report the disabled state plainly instead of crying FAIL about a shims dir that's off PATH on purpose.
+- Registry commands are now grouped under `tack tools`. **Breaking (pre-1.0):** `tack register` is now `tack tools add`, and `tack list` / `tack ls` are now `tack tools list`. The old top-level names are gone.
 
 ---
 

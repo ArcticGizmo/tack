@@ -7,7 +7,7 @@ namespace Tack.App.ViewModels;
 
 /// <summary>
 /// The registry editor: register existing tool installs (tool@version -> binDir + exposed binaries), set the
-/// default version, and drop registrations. Mirrors the CLI `tack register`; every change saves config.json
+/// default version, and drop registrations. Mirrors the CLI `tack tools add`; every change saves config.json
 /// and reshims, exactly as the command does.
 /// </summary>
 public sealed class RegistryViewModel : ViewModelBase

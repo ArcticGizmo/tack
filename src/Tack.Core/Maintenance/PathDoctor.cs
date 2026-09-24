@@ -98,7 +98,7 @@ public static class PathDoctor
                     report.Add($"Missing binDir for {toolName}@{version}", CheckStatus.Fail, iv.BinDir);
 
         if (names.Count == 0)
-            report.Add("No tools registered", CheckStatus.Warn, "use 'tack register' to add an install");
+            report.Add("No tools registered", CheckStatus.Warn, "use 'tack tools add' to add an install");
 
         return report;
     }
