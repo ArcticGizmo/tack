@@ -3,6 +3,7 @@ using Spectre.Console;
 using Spectre.Console.Cli;
 using Tack.Core.Config;
 using Tack.Core.Maintenance;
+using Tack.Core.Resolution;
 
 namespace Tack.Cli.Commands;
 
@@ -15,7 +16,7 @@ public sealed class ToolsAddSettings : CommandSettings
     public string Spec { get; init; } = "";
 
     [CommandOption("--path <BINDIR>")]
-    [Description("The directory holding the tool's executables.")]
+    [Description("The directory holding the tool's executables. Omit to discover it from PATH (like 'where').")]
     public string BinDir { get; init; } = "";
 
     [CommandOption("--exposes <NAMES>")]
@@ -27,8 +28,6 @@ public sealed class ToolsAddSettings : CommandSettings
         var s = ToolSpec.Parse(Spec);
         if (string.IsNullOrEmpty(s.Tool) || string.IsNullOrEmpty(s.Version))
             return ValidationResult.Error("Specify tool@version, e.g. node@20.11.0");
-        if (string.IsNullOrWhiteSpace(BinDir))
-            return ValidationResult.Error("--path <binDir> is required");
         return ValidationResult.Success();
     }
 }
@@ -39,7 +38,18 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
     {
         var env = new TackEnvironment();
         var spec = ToolSpec.Parse(settings.Spec);
-        string binDir = Path.GetFullPath(settings.BinDir);
+
+        string? binDir;
+        if (string.IsNullOrWhiteSpace(settings.BinDir))
+        {
+            binDir = DiscoverBinDir(env, spec.Tool, out int failure);
+            if (binDir is null) return failure;
+        }
+        else
+        {
+            binDir = Path.GetFullPath(settings.BinDir);
+        }
+
         if (!Directory.Exists(binDir))
         {
             AnsiConsole.MarkupLine($"[red]binDir does not exist:[/] {Markup.Escape(binDir)}");
@@ -71,6 +81,50 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
         else if (!Render.OnPath(env.ShimsDir))
             AnsiConsole.MarkupLine("[yellow]note:[/] the shims dir is not on PATH yet - installing tack wires it up, or run [green]tack doctor[/].");
         return 0;
+    }
+
+    /// <summary>Discover the tool's binDir from PATH (like `where`), excluding tack's own dirs. One hit is used
+    /// directly; several open an interactive pick; none (or a non-interactive terminal with several) fails with
+    /// guidance to pass --path. Returns null on failure/cancel, with <paramref name="failure"/> the exit code.</summary>
+    private static string? DiscoverBinDir(TackEnvironment env, string tool, out int failure)
+    {
+        failure = 0;
+        var matches = PathScan.FindOnPath(
+            tool,
+            t => Environment.GetEnvironmentVariable("PATH", t),
+            new[] { env.ShimsDir, env.DisabledShimsDir, env.InstallDir },
+            File.Exists);
+
+        if (matches.Count == 0)
+        {
+            AnsiConsole.MarkupLine($"[red]couldn't find '{Markup.Escape(tool)}' on PATH.[/] Pass [green]--path <binDir>[/] to point at its install.");
+            failure = 1;
+            return null;
+        }
+
+        if (matches.Count == 1)
+        {
+            AnsiConsole.MarkupLine($"[grey]found on PATH:[/] {Markup.Escape(matches[0].ExePath)}");
+            return matches[0].BinDir;
+        }
+
+        if (!AnsiConsole.Profile.Capabilities.Interactive)
+        {
+            AnsiConsole.MarkupLine($"[yellow]'{Markup.Escape(tool)}' was found in several places.[/] Re-run with [green]--path <binDir>[/]:");
+            foreach (var m in matches)
+                AnsiConsole.MarkupLine($"  [grey]{Markup.Escape(m.ExePath)}[/]");
+            failure = 1;
+            return null;
+        }
+
+        // Map each display line back to its binDir; show the full exe path so identical dir names stay distinct.
+        var byLine = matches.ToDictionary(m => m.ExePath, m => m.BinDir);
+        var choice = AnsiConsole.Prompt(new SelectionPrompt<string>()
+            .Title($"Which [green]{Markup.Escape(tool)}[/] should tack register?")
+            .PageSize(15)
+            .MoreChoicesText("[grey](move up and down to reveal more)[/]")
+            .AddChoices(byLine.Keys));
+        return byLine[choice];
     }
 }
 

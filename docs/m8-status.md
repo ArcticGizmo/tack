@@ -40,18 +40,38 @@ Removal cleans up after itself (all in the pure, unit-tested `Tack.Core.Config.T
 
 Then a reshim prunes the now-orphaned shims.
 
+## `tack tools add` - PATH discovery
+
+Finding the binDir by hand was the fiddly part of registering a tool, so `--path` is now optional. Omit it and
+tack discovers the tool on PATH itself - the in-process equivalent of `where`:
+
+- **`Tack.Core.Resolution.PathScan.FindOnPath`** walks the effective PATH in resolution order (machine entries,
+  then user), probes the exec extensions via the existing `BinaryLocator`, dedupes by directory, and skips
+  excluded dirs - the tack shims dir, the parked `shims_disabled`, and the install dir - so the shim is **never**
+  offered as if it were the real tool.
+- **One hit** is used automatically (with a `found on PATH:` line). **Several** open an interactive
+  single-select of the full exe paths (so two dirs with the same leaf name stay distinguishable). **None** fails
+  with guidance to pass `--path`.
+- Non-interactive terminals with several hits print the candidates and ask for `--path` (exit 1).
+
+It's a native scan rather than shelling out to `where.exe`: it stays in-process (Core never spawns), is
+AOT-friendly, unit-testable, and can exclude tack's own dirs cleanly. The version still comes from the
+`tool@version` argument; only the path is discovered.
+
 ## Code map
 
 | Piece | Where |
 | --- | --- |
 | Registry read/remove logic (pure) | `Tack.Core.Config.ToolRegistry` (`Entries`, `VersionsOf`, `Exists`, `Remove`) |
+| PATH discovery (pure) | `Tack.Core.Resolution.PathScan.FindOnPath` (+ `PathMatch`) |
 | Commands | `Tack.Cli.Commands.ToolsCommands` (`ToolsAddCommand`, `ToolsRemoveCommand`, `ToolsListCommand`) |
-| Interactive picker | `MultiSelectionPrompt<string>` (PageSize 15, wrap-around) with a non-interactive fallback |
+| Interactive pickers | `MultiSelectionPrompt` (remove) / `SelectionPrompt` (add), both with a non-interactive fallback |
 | Wiring | `AddBranch("tools", ...)` in `Program.cs` |
 
 ## Tests
 
 `ToolRegistryTests` covers entries/versions listing, case-insensitive matching, keeping vs dropping a tool,
-default repointing, unknown-target no-ops, and the orphaned-binding warning. **8 new tests; 75 total, all
-green.** The interactive picker itself isn't unit-tested (it needs a real TTY); the non-interactive fallback
-was confirmed by hand.
+default repointing, unknown-target no-ops, and the orphaned-binding warning. `PathScanTests` covers ordered
+multi-dir discovery, excluding the shims dir, dedup of repeated PATH entries, exec-extension probing, and the
+nothing-found case. **13 new tests; 80 total, all green.** The interactive pickers themselves aren't
+unit-tested (they need a real TTY); their non-interactive fallbacks were confirmed by hand.
