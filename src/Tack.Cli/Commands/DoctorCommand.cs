@@ -85,9 +85,8 @@ public sealed class DoctorCommand : Command<DoctorSettings>
     {
         var installer = new WindowsPathInstaller();
         string backup = PathFixBackup.NewPath();
-
-        // 1. Machine PATH (needs admin) FIRST - so a declined UAC never leaves the shims dir on neither PATH.
         PathChange? machine;
+
         if (Elevation.IsAdministrator())
         {
             try
@@ -108,7 +107,7 @@ public sealed class DoctorCommand : Command<DoctorSettings>
             switch (Elevation.RelaunchElevated($"apply-machine-path \"{backup}\""))
             {
                 case Elevation.RelaunchOutcome.Cancelled:
-                    AnsiConsole.MarkupLine("[yellow]elevation declined; PATH not changed.[/]");
+                    AnsiConsole.MarkupLine("[yellow]elevation declined; system PATH not changed.[/]");
                     return;
                 case Elevation.RelaunchOutcome.Failed:
                     AnsiConsole.MarkupLine("[red]elevated PATH update failed.[/] Try running [green]tack doctor --fix[/] from an elevated terminal.");
@@ -117,42 +116,24 @@ public sealed class DoctorCommand : Command<DoctorSettings>
             machine = PathFixBackup.ReadMachine(backup); // the elevated child recorded it (null if it already led)
         }
 
-        // 2. The shims dir now leads the machine PATH, so drop the redundant user-PATH copy - as THIS (the real)
-        //    user, never in the elevated child, which may be a different admin account.
-        PathChange? user = null;
-        try { user = installer.StripShimsFromUserPath(); }
-        catch (Exception ex) { AnsiConsole.MarkupLine($"[yellow]note:[/] couldn't tidy the user PATH: {Markup.Escape(ex.Message)}"); }
-
-        string? saved = PathFixBackup.Save(backup, user, machine);
-        ReportPathChange(user, machine, saved);
-    }
-
-    private static void ReportPathChange(PathChange? user, PathChange? machine, string? backup)
-    {
-        if (user is null && machine is null)
+        if (machine is null)
         {
-            AnsiConsole.MarkupLine("[grey]PATH already correct; nothing changed.[/]");
+            AnsiConsole.MarkupLine("[grey]shims dir already leads the system PATH; nothing changed.[/]");
             return;
         }
 
-        AnsiConsole.MarkupLine("[green]PATH updated[/] [grey](%VAR% tokens preserved)[/] - open a new terminal to pick it up.");
-        if (backup is not null)
-            AnsiConsole.MarkupLine($"[grey]backup (for manual revert):[/] {Markup.Escape(backup)}");
+        string? saved = PathFixBackup.Save(backup, machine);
+        AnsiConsole.MarkupLine("[green]shims dir promoted to the front of the system PATH[/] [grey](%VAR% tokens preserved)[/] - open a new terminal to pick it up.");
+        if (saved is not null)
+            AnsiConsole.MarkupLine($"[grey]backup (for manual revert):[/] {Markup.Escape(saved)}");
 
-        PrintScope(machine);
-        PrintScope(user);
-    }
-
-    // Plain Console.WriteLine for the PATH values - they hold %, ; and [ that Spectre markup would mangle, and
-    // the whole point is to show them verbatim so they can be pasted back if needed.
-    private static void PrintScope(PathChange? c)
-    {
-        if (c is null) return;
+        // Plain Console.WriteLine for the PATH values - they hold %, ; and [ that Spectre markup would mangle,
+        // and the whole point is to show them verbatim so they can be pasted back if needed.
         AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine($"[grey]{c.Scope} PATH before:[/]");
-        Console.WriteLine(c.Before);
-        AnsiConsole.MarkupLine($"[grey]{c.Scope} PATH after:[/]");
-        Console.WriteLine(c.After);
+        AnsiConsole.MarkupLine("[grey]system PATH before:[/]");
+        Console.WriteLine(machine.Before);
+        AnsiConsole.MarkupLine("[grey]system PATH after:[/]");
+        Console.WriteLine(machine.After);
     }
 }
 
@@ -178,7 +159,7 @@ public sealed class ApplyMachinePathCommand : Command<ApplyMachinePathSettings>
         {
             var machine = new WindowsPathInstaller().PrependShimsToMachinePath();
             if (!string.IsNullOrEmpty(settings.BackupPath))
-                PathFixBackup.Save(settings.BackupPath, user: null, machine: machine);
+                PathFixBackup.Save(settings.BackupPath, machine);
             return 0;
         }
         catch (Exception ex)

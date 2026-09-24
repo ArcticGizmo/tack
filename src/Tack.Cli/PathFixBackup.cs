@@ -22,7 +22,7 @@ internal static class PathFixBackup
         Path.Combine(TackPaths.Root, "path-backups", $"path-fix-{DateTime.Now:yyyyMMdd-HHmmss}.json");
 
     /// <summary>Best-effort write; returns the path on success, null if it couldn't be saved.</summary>
-    public static string? Save(string path, PathChange? user, PathChange? machine)
+    public static string? Save(string path, PathChange? machine)
     {
         try
         {
@@ -30,7 +30,6 @@ internal static class PathFixBackup
             var record = new Record
             {
                 Timestamp = DateTime.Now.ToString("o"),
-                User = Scope.From(user),
                 Machine = Scope.From(machine),
             };
             File.WriteAllText(path, JsonSerializer.Serialize(record, Options));
@@ -39,7 +38,7 @@ internal static class PathFixBackup
         catch { return null; }
     }
 
-    /// <summary>Read back just the machine edit an elevated child recorded (null if none/unreadable).</summary>
+    /// <summary>Read back the machine edit an elevated child recorded (null if none/unreadable).</summary>
     public static PathChange? ReadMachine(string path)
     {
         try
@@ -53,7 +52,6 @@ internal static class PathFixBackup
     internal sealed class Record
     {
         public string Timestamp { get; set; } = "";
-        public Scope? User { get; set; }
         public Scope? Machine { get; set; }
     }
 

@@ -59,7 +59,7 @@ In a **dev** profile `--fix` reshims but skips PATH promotion (dev shims are int
 | Parked-dir path | `TackPaths.DisabledShimsDir` (`...\shims_disabled`) |
 | Machine-PATH arithmetic (pure) | `Tack.Core.Platform.PathEdits` (`PrependFront`, `Remove`) |
 | Raw registry read / EXPAND_SZ write | `Tack.Core.Platform.WindowsEnvRegistry` |
-| The admin-gated PATH ops + broadcast | `WindowsPathInstaller.PrependShimsToMachinePath()` / `.StripShimsFromUserPath()` |
+| The admin-gated machine-PATH op + broadcast | `WindowsPathInstaller.PrependShimsToMachinePath()` |
 | Admin check + UAC relaunch | `Tack.Cli.Elevation` |
 | Before/after backup file | `Tack.Cli.PathFixBackup` |
 | Commands | `DisableCommand`, `EnableCommand`, `DoctorCommand --fix`, hidden `ApplyMachinePathCommand` |
@@ -69,7 +69,7 @@ In a **dev** profile `--fix` reshims but skips PATH promotion (dev shims are int
 
 `ShimGateTests` (park/restore, idempotency, stray-empty reclaim, non-empty conflict, active-dir selection),
 `PathEditsTests` (prepend, move-to-front, no-op when already leading, case/trailing-slash matching, **token
-preservation**, remove), `PathDoctorDisabledTests` (reports disabled, skips the on-PATH failure).
+preservation**), `PathDoctorDisabledTests` (reports disabled, skips the on-PATH failure).
 
 ## Update (2026-09-24): token-preserving rewrite + before/after backup
 
@@ -79,11 +79,12 @@ into literal paths and flipped the value from `REG_EXPAND_SZ` to `REG_SZ` across
 
 - **`WindowsEnvRegistry`** reads and writes the PATH values in the registry directly (P/Invoke to `advapi32`, so
   Tack.Core stays dependency-free for the AOT shim): raw read (no expansion), write back as `REG_EXPAND_SZ`.
-- **`PathEdits`** does the add/remove on *raw* entries, comparing by an injected expander so a token and its
-  expansion count as the same dir, while every untouched entry is emitted byte-for-byte as stored.
-- The **user-PATH cleanup runs as the real user**, and only **after** the machine write succeeds - so a declined
-  UAC never leaves the shims dir on neither PATH, and an elevated *different* admin account never edits the
-  wrong user's HKCU.
+- **`PathEdits.PrependFront`** does the move-to-front on *raw* entries, comparing by an injected expander so a
+  token and its expansion count as the same dir, while every untouched entry is emitted byte-for-byte as stored.
+- **Only the system (machine) PATH is touched.** Precedence is the whole reason for the command, and only the
+  machine PATH front delivers it; the shims entry that install put on the *user* PATH is a harmless duplicate
+  (machine resolves first) and is deliberately left alone, keeping `--fix` single-purpose and out of the
+  real-user-vs-elevated-HKCU tangle entirely.
 - **`PathFixBackup`** prints the full before/after and writes a timestamped JSON backup under the tack data dir
   (`path-backups\path-fix-*.json`), doubling as the channel that carries the machine before/after out of the
   short-lived elevated child back to the parent's console. This is the manual-revert safety net while the
@@ -91,7 +92,7 @@ into literal paths and flipped the value from `REG_EXPAND_SZ` to `REG_SZ` across
 
 Verified on this machine (read-only): `WindowsEnvRegistry.ReadRaw` returns the exact tokens
 (`%SystemRoot%\system32`, `%NVM_HOME%`, ...), and a dry-run of `PathEdits.PrependFront` over the real machine
-PATH prepends the shims dir with all 7 tokens intact. **7 new/updated PATH tests; 86 total, all green.**
+PATH prepends the shims dir with all 7 tokens intact. **84 tests total, all green.**
 
 ## Not verified here
 

@@ -77,22 +77,6 @@ public sealed class WindowsPathInstaller : IPathInstaller
         return new PathChange("machine", before, after);
     }
 
-    /// <summary>
-    /// Remove the now-redundant shims entry from the USER PATH (raw read/write, tokens preserved). Runs against
-    /// the CURRENT user's HKCU, so callers must run this as the real user - never in an elevated child that may
-    /// be a different account. Returns the before/after, or null if the shims dir wasn't on the user PATH.
-    /// </summary>
-    public PathChange? StripShimsFromUserPath()
-    {
-        string before = WindowsEnvRegistry.ReadRaw(machine: false);
-        string? after = PathEdits.Remove(before, _shimsDir);
-        if (after is null) return null;
-
-        WindowsEnvRegistry.WriteExpand(machine: false, after);
-        Broadcast();
-        return new PathChange("user", before, after);
-    }
-
     private static List<string> Split(string pathVar) =>
         pathVar.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 

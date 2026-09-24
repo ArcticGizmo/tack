@@ -6,7 +6,7 @@ public sealed record PathChange(string Scope, string Before, string After);
 
 /// <summary>
 /// Pure PATH-string edits for <c>tack doctor --fix</c>, working on <b>raw</b> entries so environment tokens are
-/// preserved: <c>%SystemRoot%\system32</c> stays a token, only the shims dir is added or removed. Comparisons
+/// preserved: <c>%SystemRoot%\system32</c> stays a token, only the shims dir is moved to the front. Comparisons
 /// expand entries (via the injected <paramref name="expand"/>) so a token and its expansion count as the same
 /// directory, but the strings returned keep every untouched entry exactly as it was stored. No registry or
 /// filesystem access, so it's trivially testable; <see cref="WindowsPathInstaller"/> owns the raw read/write.
@@ -25,19 +25,6 @@ public static class PathEdits
         fixedUp.AddRange(entries.Where(p => Key(p, expand) != shims));
 
         return SameByKey(entries, fixedUp, expand) ? null : string.Join(';', fixedUp);
-    }
-
-    /// <summary>The raw PATH with every occurrence of <paramref name="shimsDir"/> removed, or null if it wasn't
-    /// present.</summary>
-    public static string? Remove(string? rawPath, string shimsDir, Func<string, string>? expand = null)
-    {
-        expand ??= Environment.ExpandEnvironmentVariables;
-        string shims = Key(shimsDir, expand);
-
-        var entries = Split(rawPath);
-        var kept = entries.Where(p => Key(p, expand) != shims).ToList();
-
-        return kept.Count == entries.Count ? null : string.Join(';', kept);
     }
 
     private static bool SameByKey(List<string> a, List<string> b, Func<string, string> expand)

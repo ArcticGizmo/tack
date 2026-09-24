@@ -129,19 +129,6 @@ public sealed class PathEditsTests
         string expand(string p) => p.Replace("%TACK_SHIMS%", Shims, StringComparison.OrdinalIgnoreCase);
         Assert.Null(PathEdits.PrependFront($@"%TACK_SHIMS%;C:\Windows", Shims, expand));
     }
-
-    [Fact]
-    public void Remove_strips_shims_and_keeps_the_rest_verbatim()
-    {
-        var result = PathEdits.Remove($@"{Shims};%NVM_HOME%;C:\Users\me\bin", Shims);
-        Assert.Equal(@"%NVM_HOME%;C:\Users\me\bin", result); // token preserved, shims gone
-    }
-
-    [Fact]
-    public void Remove_returns_null_when_shims_is_absent()
-    {
-        Assert.Null(PathEdits.Remove(@"%NVM_HOME%;C:\Users\me\bin", Shims));
-    }
 }
 
 public sealed class PathDoctorDisabledTests : IDisposable
