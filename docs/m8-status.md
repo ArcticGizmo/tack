@@ -54,6 +54,13 @@ tack discovers the tool on PATH itself - the in-process equivalent of `where`:
   with guidance to pass `--path`.
 - Non-interactive terminals with several hits print the candidates and ask for `--path` (exit 1).
 
+**Environment references are expanded.** PATH entries are stored as `REG_EXPAND_SZ` and often hold references
+like `%NVM_HOME%` or `%SystemRoot%\system32` (this dev box has both). .NET's
+`GetEnvironmentVariable(.., Machine/User)` already expands them, but `PathScan` doesn't lean on that: each
+entry is passed through an injectable `expand` (default `Environment.ExpandEnvironmentVariables`) before probing,
+so a raw value still resolves and the tool is registered by its real directory (verified on this machine -
+`%NVM_SYMLINK%` -> `C:\nvm4w\nodejs`). An undefined variable stays literal and simply matches nothing.
+
 It's a native scan rather than shelling out to `where.exe`: it stays in-process (Core never spawns), is
 AOT-friendly, unit-testable, and can exclude tack's own dirs cleanly. The version still comes from the
 `tool@version` argument; only the path is discovered.
@@ -72,6 +79,7 @@ AOT-friendly, unit-testable, and can exclude tack's own dirs cleanly. The versio
 
 `ToolRegistryTests` covers entries/versions listing, case-insensitive matching, keeping vs dropping a tool,
 default repointing, unknown-target no-ops, and the orphaned-binding warning. `PathScanTests` covers ordered
-multi-dir discovery, excluding the shims dir, dedup of repeated PATH entries, exec-extension probing, and the
-nothing-found case. **13 new tests; 80 total, all green.** The interactive pickers themselves aren't
+multi-dir discovery, excluding the shims dir, dedup of repeated PATH entries, exec-extension probing,
+environment-reference expansion (and undefined refs left literal), and the nothing-found case. **15 new tests;
+82 total, all green.** The interactive pickers themselves aren't
 unit-tested (they need a real TTY); their non-interactive fallbacks were confirmed by hand.

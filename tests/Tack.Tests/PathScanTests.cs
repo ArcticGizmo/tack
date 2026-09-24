@@ -75,6 +75,37 @@ public sealed class PathScanTests
     }
 
     [Fact]
+    public void Expands_environment_references_in_path_entries()
+    {
+        // A PATH entry like %NVM_SYMLINK% must be expanded before probing, or the tool is missed.
+        string expandTo(string p) => p.Replace("%NVM_SYMLINK%", @"C:\Users\me\nvm\current", StringComparison.OrdinalIgnoreCase);
+
+        var report = PathScan.FindOnPath(
+            "node",
+            t => t == EnvironmentVariableTarget.User ? "%NVM_SYMLINK%" : null,
+            excludeDirs: Array.Empty<string>(),
+            fileExists: Files(@"C:\Users\me\nvm\current\node.exe"),
+            expand: expandTo);
+
+        Assert.Single(report);
+        Assert.Equal(@"C:\Users\me\nvm\current", report[0].BinDir); // stored expanded, ready to register
+    }
+
+    [Fact]
+    public void An_undefined_environment_reference_is_skipped_not_thrown()
+    {
+        // %DOES_NOT_EXIST% stays literal (mirroring Windows); it just matches nothing.
+        var report = PathScan.FindOnPath(
+            "node",
+            t => t == EnvironmentVariableTarget.User ? @"%DOES_NOT_EXIST%\bin" : null,
+            excludeDirs: Array.Empty<string>(),
+            fileExists: Files(@"C:\real\node.exe"),
+            expand: p => p); // identity: leave the literal unexpanded
+
+        Assert.Empty(report);
+    }
+
+    [Fact]
     public void Returns_empty_when_the_tool_is_nowhere_on_path()
     {
         var report = PathScan.FindOnPath(
