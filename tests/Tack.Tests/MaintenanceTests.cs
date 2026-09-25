@@ -129,6 +129,99 @@ public sealed class ReshimmerTests : IDisposable
         Assert.Equal(1, result.ShimsPruned);
     }
 
+    private CentralConfig NodeExposing(params string[] names)
+    {
+        var v = new InstalledVersion { BinDir = _root };
+        v.Exposes.AddRange(names);
+        return new CentralConfig { Tools = { ["node"] = new RegisteredTool { Versions = { ["1"] = v } } } };
+    }
+
+    [Fact]
+    public void Leaves_identical_shims_untouched()
+    {
+        string shims = Path.Combine(_root, "shims");
+        string resolved = Path.Combine(_root, "resolved.json");
+        var payload = Payload();
+        Reshimmer.Run(NodeExposing("node", "npm"), shims, resolved, payload);
+
+        var again = Reshimmer.Run(NodeExposing("node", "npm", "npx"), shims, resolved, payload);
+
+        Assert.Equal(1, again.ShimsWritten);   // only the new npx
+        Assert.Equal(2, again.ShimsUnchanged);
+    }
+
+    [Fact]
+    public void A_new_shim_build_replaces_the_old_copies()
+    {
+        string shims = Path.Combine(_root, "shims");
+        string resolved = Path.Combine(_root, "resolved.json");
+        var payload = Payload();
+        Reshimmer.Run(NodeExposing("node"), shims, resolved, payload);
+
+        File.WriteAllText(payload.ShimExe, "SHIM v2"); // an update / rebuild
+        var again = Reshimmer.Run(NodeExposing("node"), shims, resolved, payload);
+
+        Assert.Equal(1, again.ShimsWritten);
+        Assert.Equal("SHIM v2", File.ReadAllText(Path.Combine(shims, "node.exe")));
+    }
+
+    [Fact]
+    public void A_locked_shim_is_moved_aside_and_replaced_instead_of_failing()
+    {
+        string shims = Path.Combine(_root, "shims");
+        string resolved = Path.Combine(_root, "resolved.json");
+        var payload = Payload();
+        Reshimmer.Run(NodeExposing("node"), shims, resolved, payload);
+        File.WriteAllText(payload.ShimExe, "SHIM v2");
+
+        string node = Path.Combine(shims, "node.exe");
+        ReshimResult again;
+        // Held open the way a running image is: no write sharing, but renamable.
+        using (new FileStream(node, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
+            again = Reshimmer.Run(NodeExposing("node"), shims, resolved, payload);
+
+        Assert.Empty(again.Locked);
+        Assert.Equal("SHIM v2", File.ReadAllText(node));
+        Assert.Single(Directory.GetFiles(shims, "*.tack-old")); // the old copy, parked
+
+        Reshimmer.Run(NodeExposing("node"), shims, resolved, payload); // nothing holds it now
+        Assert.Empty(Directory.GetFiles(shims, "*.tack-old"));
+    }
+
+    [Fact]
+    public void A_file_that_cannot_even_be_moved_is_reported_not_thrown()
+    {
+        string shims = Path.Combine(_root, "shims");
+        string resolved = Path.Combine(_root, "resolved.json");
+        var payload = Payload();
+        Reshimmer.Run(NodeExposing("node"), shims, resolved, payload);
+        File.WriteAllText(payload.ShimExe, "SHIM v2");
+
+        string node = Path.Combine(shims, "node.exe");
+        ReshimResult again;
+        using (new FileStream(node, FileMode.Open, FileAccess.Read, FileShare.Read)) // no delete sharing: can't rename
+            again = Reshimmer.Run(NodeExposing("node"), shims, resolved, payload);
+
+        Assert.Equal(node, Assert.Single(again.Locked));
+        Assert.True(File.Exists(resolved)); // the rest of the reshim still happened
+    }
+
+    [Fact]
+    public void Resolved_json_can_be_rewritten_while_a_shim_is_reading_it()
+    {
+        string shims = Path.Combine(_root, "shims");
+        string resolved = Path.Combine(_root, "resolved.json");
+        var payload = Payload();
+        Reshimmer.Run(NodeExposing("node"), shims, resolved, payload);
+
+        // Opened exactly as the shim opens it.
+        using (new FileStream(resolved, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            Reshimmer.Run(NodeExposing("node", "npm"), shims, resolved, payload);
+
+        Assert.Contains("npm", File.ReadAllText(resolved));
+        Assert.Empty(Directory.GetFiles(_root, "resolved.json.*.tmp"));
+    }
+
     [Fact]
     public void Reports_a_missing_shim_binary_but_still_writes_resolved_json()
     {

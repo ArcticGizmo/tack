@@ -14,8 +14,10 @@ internal static class Mutations
         if (r.ShimPayloadMissing)
             AnsiConsole.MarkupLine("[yellow]resolved.json updated, but tack-shim.exe was not found next to tack, so no shims were stamped (expected under a dev `dotnet run`).[/]");
         else
-            AnsiConsole.MarkupLine($"[grey]reshim:[/] {r.ShimsWritten} shim(s) written, {r.ShimsPruned} pruned"
+            AnsiConsole.MarkupLine($"[grey]reshim:[/] {r.ShimsWritten} shim(s) written, {r.ShimsUnchanged} up to date, {r.ShimsPruned} pruned"
                 + (r.ShimNames.Count > 0 ? $" [grey]({Markup.Escape(string.Join(", ", r.ShimNames))})[/]" : ""));
+        foreach (var path in r.Locked)
+            AnsiConsole.MarkupLine($"[yellow]couldn't update {Markup.Escape(Path.GetFileName(path))}[/] [grey](in use - run [green]tack reshim[/] once it's free)[/]");
         foreach (var glob in r.UnmigratedBindings)
             AnsiConsole.MarkupLine($"[yellow]old binding '{Markup.Escape(glob)}' no longer applies[/] [grey](zones take a plain directory; see tack doctor)[/]");
     }

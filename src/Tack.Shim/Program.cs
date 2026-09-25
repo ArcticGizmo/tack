@@ -31,7 +31,8 @@ try
     ResolvedConfig? config;
     try
     {
-        using var fs = File.OpenRead(resolvedPath);
+        // Share write + delete so a reshim swapping in a new resolved.json is never blocked by a shim mid-read.
+        using var fs = new FileStream(resolvedPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         config = JsonSerializer.Deserialize(fs, TackJson.Default.ResolvedConfig);
     }
     catch (Exception ex)
