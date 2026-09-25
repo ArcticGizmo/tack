@@ -130,6 +130,50 @@ public sealed class PathEditsTests
         string expand(string p) => p.Replace("%TACK_SHIMS%", Shims, StringComparison.OrdinalIgnoreCase);
         Assert.Null(PathEdits.PrependFront($@"%TACK_SHIMS%;C:\Windows", Shims, expand));
     }
+
+    private const string Install = @"C:\Users\me\AppData\Local\Tack\current";
+
+    [Fact]
+    public void Register_prepends_shims_and_appends_install_dir()
+    {
+        var result = PathEdits.Register(@"C:\Windows;C:\Program Files\nodejs", Shims, Install);
+        Assert.Equal($@"{Shims};C:\Windows;C:\Program Files\nodejs;{Install}", result);
+    }
+
+    [Fact]
+    public void Register_promotes_shims_and_keeps_an_existing_install_dir_where_it_is()
+    {
+        var result = PathEdits.Register($@"C:\Windows;{Install};{Shims}", Shims, Install);
+        Assert.Equal($@"{Shims};C:\Windows;{Install}", result);
+    }
+
+    [Fact]
+    public void Register_returns_null_when_already_wired()
+    {
+        Assert.Null(PathEdits.Register($@"{Shims};C:\Windows;{Install}\", Shims, Install));
+    }
+
+    [Fact]
+    public void Register_preserves_env_tokens_of_untouched_entries()
+    {
+        string expand(string p) => p.Replace("%SystemRoot%", @"C:\WINDOWS", StringComparison.OrdinalIgnoreCase);
+        var result = PathEdits.Register(@"%SystemRoot%\system32;%SystemRoot%", Shims, Install, expand);
+        Assert.Equal($@"{Shims};%SystemRoot%\system32;%SystemRoot%;{Install}", result);
+    }
+
+    [Fact]
+    public void Remove_drops_only_the_named_dirs()
+    {
+        var result = PathEdits.Remove($@"{Shims};%SystemRoot%\system32;{Install}\", new[] { Shims, Install },
+            p => p.Replace("%SystemRoot%", @"C:\WINDOWS", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(@"%SystemRoot%\system32", result);
+    }
+
+    [Fact]
+    public void Remove_returns_null_when_nothing_matched()
+    {
+        Assert.Null(PathEdits.Remove(@"C:\Windows;C:\nodejs", new[] { Shims, Install }));
+    }
 }
 
 public sealed class PathDoctorDisabledTests : IDisposable

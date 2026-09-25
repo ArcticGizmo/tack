@@ -108,7 +108,7 @@ Configuration keeps working while tack is disabled: add tools and zones as norma
 - **`tack changelog`** shows what's new in the latest release (`--all` for the full history).
 - The shims carry honest Windows file metadata, so a copied `node.exe` identifies itself as tack rather than as an anonymous unsigned binary.
 - Reshims leave unchanged shims alone. A shim that's in use, or being scanned by antivirus, is moved aside rather than causing an error.
-- No admin rights anywhere, apart from the one opt-in `doctor --fix` write.
+- tack only ever writes the **system** PATH, never your user PATH. That write, and nothing else, asks for admin through UAC: once at install (`tack setup`), and again on `doctor --fix` or uninstall.
 
 ## Installing
 
@@ -116,14 +116,14 @@ Configuration keeps working while tack is disabled: add tools and zones as norma
 irm https://raw.githubusercontent.com/ArcticGizmo/tack/main/install.ps1 | iex
 ```
 
-That's the whole install. It needs no admin rights: tack installs to `%LocalAppData%\Tack\`, puts `tack` and the shims dir on your user PATH, and adds a normal uninstaller under Settings → Apps. Open a **new** terminal afterwards so it picks up the PATH change, then:
+That's the whole install. tack installs to `%LocalAppData%\Tack\` and adds a normal uninstaller under Settings → Apps. Then `tack setup` puts the shims dir at the **front of the system PATH** and `tack` at the end of it, which takes a single UAC prompt. Your user PATH is never touched. If you decline the prompt, tack is installed but isn't on PATH yet; run `& "$env:LOCALAPPDATA\Tack\current\tack.exe" setup` to try again. Open a **new** terminal afterwards so it picks up the PATH change, then:
 
 ```powershell
 tack tool add node@20.11.0
 tack info
 ```
 
-What the script does, in order: resolves the latest release, fetches `SHA256SUMS.txt` and `Tack-win-Setup.exe`, **checks the installer against the manifest and deletes it rather than run it on any mismatch**, then hands off to the installer. It's [`install.ps1`](install.ps1) in this repo — read it before piping it into your shell, the same as you should with any installer.
+What the script does, in order: resolves the latest release, fetches `SHA256SUMS.txt` and `Tack-win-Setup.exe`, **checks the installer against the manifest and deletes it rather than run it on any mismatch**, then hands off to the installer and runs `tack setup` in your terminal. It's [`install.ps1`](install.ps1) in this repo — read it before piping it into your shell, the same as you should with any installer.
 
 Pin a version instead of taking the latest:
 
@@ -137,7 +137,8 @@ Because PowerShell rather than a browser does the downloading, nothing is tagged
 
 Prefer to click things: download `Tack-win-Setup.exe` from the
 [latest release](https://github.com/ArcticGizmo/tack/releases/latest) and run it. Identical install,
-identical self-updates.
+identical self-updates. The first launch after Setup opens a small first-time setup window that runs
+`tack setup` (the UAC prompt for the system PATH).
 
 A browser download *is* tagged with the mark-of-the-web, so SmartScreen shows the blue **"Windows protected
 your PC"** dialog — click **More info → Run anyway**, or use the one-liner above and skip it. To check the
@@ -154,7 +155,7 @@ tack copies one small exe under the names of real tools and puts it on PATH. Tha
 
 ### Uninstalling
 
-Uninstall from Settings → Apps. The PATH entries are removed, but your registry, zones and shims under `%LocalAppData%\tack\` are kept, so a reinstall picks up where you left off. Delete that folder too if you want a clean slate. (If you ran `tack doctor --fix`, remove the shims entry from the system PATH yourself; the backup file shows what it was before.)
+Uninstall from Settings → Apps. tack's system PATH entries are removed (one UAC prompt), but your registry, zones and shims under `%LocalAppData%\tack\` are kept, so a reinstall picks up where you left off. Delete that folder too if you want a clean slate.
 
 ## Updating
 

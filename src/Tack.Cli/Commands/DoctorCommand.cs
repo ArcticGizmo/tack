@@ -81,64 +81,36 @@ public sealed class DoctorCommand : Command<DoctorSettings>
     private static void PromoteMachinePath(string shimsDir, IReadOnlyList<string>? behind)
     {
         var installer = new WindowsPathInstaller(shimsDir: shimsDir);
-        string backup = PathFixBackup.NewPath();
-        PathChange? machine;
         string where = behind is null ? "to the front of the system PATH" : "to the front of the system PATH, behind the release tack's shims";
 
-        if (Elevation.IsAdministrator())
-        {
-            try
-            {
-                machine = installer.PromoteShimsOnMachinePath(behind);
-            }
-            catch (Exception ex)
-            {
-                AnsiConsole.MarkupLine($"[red]couldn't update the system PATH:[/] {Markup.Escape(ex.Message)}");
-                return;
-            }
-        }
-        else
-        {
+        if (!Elevation.IsAdministrator())
             AnsiConsole.MarkupLine("[grey]editing the system PATH needs elevation; prompting for admin...[/]");
-            try { Directory.CreateDirectory(Path.GetDirectoryName(backup)!); } catch { /* Save() reports if it can't write */ }
 
-            // Pass the target explicitly: the elevated child can't be relied on to inherit a TACK_DEV override.
-            string args = $"apply-machine-path \"{backup}\" --shims \"{shimsDir}\""
-                + string.Concat((behind ?? Array.Empty<string>()).Select(b => $" --behind \"{b}\""));
-            switch (Elevation.RelaunchElevated(args))
-            {
-                case Elevation.RelaunchOutcome.Cancelled:
-                    AnsiConsole.MarkupLine("[yellow]elevation declined; system PATH not changed.[/]");
-                    return;
-                case Elevation.RelaunchOutcome.Failed:
-                    AnsiConsole.MarkupLine("[red]elevated PATH update failed.[/] Try running [green]tack doctor --fix[/] from an elevated terminal.");
-                    return;
-            }
-            machine = PathFixBackup.ReadMachine(backup); // the elevated child recorded it (null if already placed)
-        }
+        // Pass the target explicitly: the elevated child can't be relied on to inherit a TACK_DEV override.
+        string args = $"--shims {SystemPath.Quote(shimsDir)}"
+            + string.Concat((behind ?? Array.Empty<string>()).Select(b => $" --behind {SystemPath.Quote(b)}"));
+        var result = SystemPath.Edit(() => installer.PromoteShimsOnMachinePath(behind), args);
 
         // doctor --fix only ever edits the system PATH; the user PATH is never touched.
-        if (machine is null)
+        switch (result.Outcome)
         {
-            AnsiConsole.MarkupLine("[grey]shims dir is already in place on the system PATH; nothing changed.[/]");
-            return;
+            case SystemPath.Outcome.Declined:
+                AnsiConsole.MarkupLine("[yellow]elevation declined; system PATH not changed.[/]");
+                return;
+            case SystemPath.Outcome.Failed:
+                AnsiConsole.MarkupLine(result.Error is { } err
+                    ? $"[red]couldn't update the system PATH:[/] {Markup.Escape(err)}"
+                    : "[red]elevated PATH update failed.[/] Try running [green]tack doctor --fix[/] from an elevated terminal.");
+                return;
+            case SystemPath.Outcome.Unchanged:
+                AnsiConsole.MarkupLine("[grey]shims dir is already in place on the system PATH; nothing changed.[/]");
+                return;
         }
 
-        string? saved = PathFixBackup.Save(backup, machine);
         AnsiConsole.MarkupLine($"[green]shims dir promoted {Markup.Escape(where)}[/] [grey](%VAR% tokens preserved)[/] - open a new terminal to pick it up.");
         if (behind is not null)
             AnsiConsole.MarkupLine("[grey]the release tack still answers first for commands it shims; run its [green]tack disable[/] to hand them over to dev.[/]");
-        if (saved is not null)
-            AnsiConsole.MarkupLine($"[grey]backup (for manual revert):[/] {Markup.Escape(saved)}");
-
-        // Plain Console.WriteLine for the PATH values - they hold %, ; and [ that Spectre markup would mangle,
-        // and the whole point is to show them verbatim so they can be pasted back by hand if an edit goes wrong.
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("[grey]full system PATH values, in case you need to revert by hand (also saved in the backup):[/]");
-        AnsiConsole.MarkupLine("[grey]before:[/]");
-        Console.WriteLine(machine.Before);
-        AnsiConsole.MarkupLine("[grey]after:[/]");
-        Console.WriteLine(machine.After);
+        SystemPath.Report(result);
     }
 }
 
@@ -152,14 +124,24 @@ public sealed class ApplyMachinePathSettings : CommandSettings
 
     [CommandOption("--behind <DIR>")]
     public string[] Behind { get; init; } = Array.Empty<string>();
+
+    /// <summary>Full install wiring (<c>tack setup</c>): shims dir to the front AND this dir appended.</summary>
+    [CommandOption("--install-dir <DIR>")]
+    public string? InstallDir { get; init; }
+
+    /// <summary>Uninstall: take the shims dir and <c>--install-dir</c> off the system PATH.</summary>
+    [CommandOption("--remove")]
+    public bool Remove { get; init; }
 }
 
 /// <summary>
-/// Hidden helper: the single elevated step of <c>tack doctor --fix</c> - promote the shims dir on the machine
-/// PATH (to the front, or just behind the <c>--behind</c> dirs for a dev instance). Launched via a UAC relaunch so
-/// the admin-only write happens in a short-lived elevated process rather than running all of tack as admin. It
-/// records the before/after to the given backup file so the parent (whose console outlives this one) can display
-/// and keep it. Not meant to be invoked directly.
+/// Hidden helper: the single elevated step of a system-PATH edit (see <see cref="SystemPath"/>). By default it
+/// promotes the shims dir (to the front, or just behind the <c>--behind</c> dirs for a dev instance) for
+/// <c>tack doctor --fix</c>; with <c>--install-dir</c> it does the full install wiring for <c>tack setup</c>; with
+/// <c>--remove</c> it strips tack's entries for uninstall. Launched via a UAC relaunch so the admin-only write
+/// happens in a short-lived elevated process rather than running all of tack as admin. It records the
+/// before/after to the given backup file so the parent (whose console outlives this one) can display and keep
+/// it. Not meant to be invoked directly.
 /// </summary>
 public sealed class ApplyMachinePathCommand : Command<ApplyMachinePathSettings>
 {
@@ -169,8 +151,17 @@ public sealed class ApplyMachinePathCommand : Command<ApplyMachinePathSettings>
             return 1;
         try
         {
-            var installer = new WindowsPathInstaller(shimsDir: settings.ShimsDir is { Length: > 0 } s ? s : null);
-            var machine = installer.PromoteShimsOnMachinePath(settings.Behind.Length > 0 ? settings.Behind : null);
+            var installer = new WindowsPathInstaller(
+                installDir: settings.InstallDir is { Length: > 0 } i ? i : null,
+                shimsDir: settings.ShimsDir is { Length: > 0 } s ? s : null);
+
+            // Removal and full wiring both touch the install dir, so neither may guess it from this process.
+            if ((settings.Remove || settings.InstallDir is not null) && settings.InstallDir is not { Length: > 0 })
+                throw new ArgumentException("--install-dir is required");
+
+            var machine = settings.Remove ? installer.Unregister()
+                : settings.InstallDir is not null ? installer.Register()
+                : installer.PromoteShimsOnMachinePath(settings.Behind.Length > 0 ? settings.Behind : null);
             if (!string.IsNullOrEmpty(settings.BackupPath))
                 PathFixBackup.Save(settings.BackupPath, machine);
             return 0;

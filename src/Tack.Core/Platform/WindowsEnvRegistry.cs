@@ -57,14 +57,14 @@ public static class WindowsEnvRegistry
         finally { RegCloseKey(hKey); }
     }
 
-    /// <summary>Write the PATH string for the given scope as <c>REG_EXPAND_SZ</c> (preserving %VAR% tokens).
-    /// Writing the machine scope needs admin - unelevated it throws with ERROR_ACCESS_DENIED.</summary>
-    public static void WriteExpand(bool machine, string value, string valueName = "PATH")
+    /// <summary>Write the SYSTEM PATH as <c>REG_EXPAND_SZ</c> (preserving %VAR% tokens). There is deliberately no
+    /// user-scope write: tack never modifies the user PATH. Needs admin - unelevated it throws with
+    /// ERROR_ACCESS_DENIED.</summary>
+    public static void WriteMachine(string value, string valueName = "PATH")
     {
-        var (root, sub) = machine ? (HKEY_LOCAL_MACHINE, MachineSubKey) : (HKEY_CURRENT_USER, UserSubKey);
-        int rc = RegOpenKeyEx(root, sub, 0, KEY_SET_VALUE, out IntPtr hKey);
+        int rc = RegOpenKeyEx(HKEY_LOCAL_MACHINE, MachineSubKey, 0, KEY_SET_VALUE, out IntPtr hKey);
         if (rc != ERROR_SUCCESS)
-            throw new Win32Exception(rc, $"opening {(machine ? "HKLM" : "HKCU")}\\{sub} for write failed");
+            throw new Win32Exception(rc, $"opening HKLM\\{MachineSubKey} for write failed");
         try
         {
             var bytes = Encoding.Unicode.GetBytes(value + '\0');

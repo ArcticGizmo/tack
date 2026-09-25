@@ -4,13 +4,15 @@ using System.Runtime.Versioning;
 namespace Tack.Core.Platform;
 
 /// <summary>
-/// Windows PATH installer: edits the USER PATH (HKCU\Environment, via the .NET User target) and broadcasts
-/// WM_SETTINGCHANGE so freshly launched processes pick it up without a logoff - no admin needed. Ported
-/// from perch's PathInstaller, adapted for tack: the shims dir is PREPENDED (it must win over other tool
-/// installs like nvm-windows), and the Velopack install dir is appended so tack.exe resolves.
+/// Windows PATH installer. tack only ever edits the SYSTEM (machine) PATH - never the user PATH. On Windows the
+/// effective PATH is machine entries then user entries, so a user-PATH shims dir loses to every system-wide tool
+/// install; and tack must not scribble on the user's own PATH. The shims dir goes to the FRONT (it must win over
+/// other tool installs like nvm-windows) and the Velopack install dir is appended so tack.exe resolves.
 ///
-/// Full PATH-ordering hardening vs other managers (and the `tack doctor` diagnosis) is M3; this M0 version
-/// just gets the two dirs on PATH idempotently.
+/// Every write goes through <see cref="WindowsEnvRegistry"/> on the raw value, so <c>%VAR%</c> tokens survive and
+/// the value stays <c>REG_EXPAND_SZ</c>, then broadcasts WM_SETTINGCHANGE so new processes see it without a
+/// logoff. Writing HKLM needs admin: unelevated, the writes throw (ERROR_ACCESS_DENIED) and the caller decides
+/// whether to relaunch elevated through UAC. Reads (<see cref="NeedsRegister"/>) work unelevated.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class WindowsPathInstaller : IPathInstaller
@@ -24,66 +26,47 @@ public sealed class WindowsPathInstaller : IPathInstaller
         _shimsDir = (shimsDir ?? TackPaths.ShimsDir).TrimEnd('\\', '/');
     }
 
-    public void Register()
+    public string InstallDir => _installDir;
+    public string ShimsDir => _shimsDir;
+
+    /// <summary>True when the system PATH doesn't yet have the shims dir at the front and the install dir on it.</summary>
+    public bool NeedsRegister() =>
+        PathEdits.Register(WindowsEnvRegistry.ReadRaw(machine: true), _shimsDir, _installDir) is not null;
+
+    /// <summary>True when the system PATH still holds the shims dir or install dir.</summary>
+    public bool NeedsUnregister() =>
+        PathEdits.Remove(WindowsEnvRegistry.ReadRaw(machine: true), new[] { _shimsDir, _installDir }) is not null;
+
+    /// <summary>Wire the shims dir (front) and install dir onto the system PATH. Needs admin. Returns the
+    /// before/after, or null if it was already in place and nothing was written.</summary>
+    public PathChange? Register()
     {
         Directory.CreateDirectory(_shimsDir);
-
-        var entries = Split(Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User) ?? "");
-        bool changed = false;
-
-        // The shims dir must precede other tool installs, so prepend it (if not already present).
-        if (!entries.Any(p => PathEquals(p, _shimsDir)))
-        {
-            entries.Insert(0, _shimsDir);
-            changed = true;
-        }
-        // The install dir only needs to be resolvable, so append it.
-        if (!entries.Any(p => PathEquals(p, _installDir)))
-        {
-            entries.Add(_installDir);
-            changed = true;
-        }
-
-        if (!changed) return;
-        Environment.SetEnvironmentVariable("PATH", string.Join(';', entries), EnvironmentVariableTarget.User);
-        Broadcast();
+        return Write(before => PathEdits.Register(before, _shimsDir, _installDir));
     }
 
-    public void Unregister()
-    {
-        var current = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User);
-        if (string.IsNullOrEmpty(current)) return;
-
-        var kept = Split(current).Where(p => !PathEquals(p, _shimsDir) && !PathEquals(p, _installDir)).ToList();
-        Environment.SetEnvironmentVariable("PATH", string.Join(';', kept), EnvironmentVariableTarget.User);
-        Broadcast();
-    }
+    /// <summary>Take tack's entries off the system PATH. Needs admin. Null if they weren't there.</summary>
+    public PathChange? Unregister() =>
+        Write(before => PathEdits.Remove(before, new[] { _shimsDir, _installDir }));
 
     /// <summary>
-    /// Move the shims dir to the front of the MACHINE PATH so it beats system-wide tool installs a user-PATH
-    /// entry can't - the core of <c>tack doctor --fix</c>. With <paramref name="behind"/> (a dev instance: the
-    /// release shims dirs) it lands directly after the first of those on PATH instead of at index 0, so dev beats
-    /// every real install but never the release tack. Reads and writes the raw registry value so %VAR% tokens
-    /// survive, and returns the before/after (null when the order was already right and nothing was written).
-    /// Writing HKLM needs admin: unelevated it throws (ERROR_ACCESS_DENIED), which the caller turns into a UAC
-    /// relaunch.
+    /// Move the shims dir to the front of the system PATH - the core of <c>tack doctor --fix</c>. With
+    /// <paramref name="behind"/> (a dev instance: the release shims dirs) it lands directly after the first of
+    /// those on PATH instead of at index 0, so dev beats every real install but never the release tack.
     /// </summary>
-    public PathChange? PromoteShimsOnMachinePath(IEnumerable<string>? behind = null)
+    public PathChange? PromoteShimsOnMachinePath(IEnumerable<string>? behind = null) =>
+        Write(before => PathEdits.PromoteFront(before, _shimsDir, behind));
+
+    private static PathChange? Write(Func<string, string?> edit)
     {
         string before = WindowsEnvRegistry.ReadRaw(machine: true);
-        string? after = PathEdits.PromoteFront(before, _shimsDir, behind);
+        string? after = edit(before);
         if (after is null) return null;
 
-        WindowsEnvRegistry.WriteExpand(machine: true, after);
+        WindowsEnvRegistry.WriteMachine(after);
         Broadcast();
         return new PathChange("machine", before, after);
     }
-
-    private static List<string> Split(string pathVar) =>
-        pathVar.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-
-    private static bool PathEquals(string a, string b) =>
-        string.Equals(a.TrimEnd('\\', '/'), b.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
 
     private const int HWND_BROADCAST = 0xffff;
     private const int WM_SETTINGCHANGE = 0x1A;

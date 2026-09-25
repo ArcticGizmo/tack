@@ -1,6 +1,7 @@
 using Tack.Core;
 using Tack.Core.Config;
 using Tack.Core.Maintenance;
+using Tack.Core.Platform;
 using Xunit;
 
 namespace Tack.Tests;
@@ -246,8 +247,8 @@ public sealed class FirstRunTests : IDisposable
     {
         public int Registered;
         public int Unregistered;
-        public void Register() => Registered++;
-        public void Unregister() => Unregistered++;
+        public PathChange? Register() { Registered++; return null; }
+        public PathChange? Unregister() { Unregistered++; return null; }
     }
 
     private ShimPayload Payload()
@@ -289,6 +290,24 @@ public sealed class FirstRunTests : IDisposable
         Assert.Equal(1, path.Registered);
         Assert.True(File.Exists(resolved));
         Assert.Equal(0, result.ShimsWritten);
+    }
+
+    [Fact]
+    public void No_installer_skips_path_but_still_regenerates_shims()
+    {
+        // An unelevated install hook can't write the system PATH and must never fall back to the user PATH,
+        // so it passes no installer: shims still get stamped, PATH is left to the first-run setup.
+        string shims = Path.Combine(_root, "shims");
+        string resolved = Path.Combine(_root, "resolved.json");
+        var config = new CentralConfig
+        {
+            Tools = { ["node"] = new RegisteredTool { Versions = { ["1"] = new InstalledVersion { BinDir = _root, Exposes = { "node" } } } } },
+        };
+
+        var result = FirstRun.Apply(null, config, shims, resolved, Payload());
+
+        Assert.Equal(1, result.ShimsWritten);
+        Assert.True(File.Exists(Path.Combine(shims, "node.exe")));
     }
 }
 

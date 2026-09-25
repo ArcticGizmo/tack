@@ -9,6 +9,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.1.4] - 2026-09-25
+
+- tack keeps its hands off your user PATH (system PATH only, as promised)
+- Install asks for UAC once to join the system PATH
+- `tack setup` retries it, should you have clicked No
+- Uninstall cleans up its system PATH entries on the way out
+
+---
+
 ## [v0.1.3] - 2026-09-25
 
 - `tack.exe` is a third of its former size (24 MB of runtime it never called, gone)

@@ -16,7 +16,7 @@
     <LangVersion>latest</LangVersion>
     <InvariantGlobalization>true</InvariantGlobalization>
 
-    <Version>0.1.3</Version>
+    <Version>0.1.4</Version>
     <Product>tack</Product>
     <Company>ArcticGizmo</Company>
     <Authors>ArcticGizmo</Authors>

@@ -111,7 +111,9 @@ The download has been deleted. Retry; if it keeps failing, report it at $(Get-Re
 
         # --- Install -----------------------------------------------------------------------------------
         # Velopack's installer needs no admin rights: it installs to %LocalAppData%\Tack, registers the
-        # uninstaller, and may launch the app before exiting.
+        # uninstaller, and may launch the app before exiting. It does NOT touch PATH - that is `tack setup`,
+        # below. TACK_SKIP_FIRSTRUN stops the app Setup launches from running that same setup in a separate
+        # console window; we run it here instead, where the user can see the result.
         #
         # So do NOT use `Start-Process -Wait`: that waits for the started process *and all its descendants*,
         # which can include an app the installer launches, so the one-liner could hang. Waiting on the Setup
@@ -119,7 +121,10 @@ The download has been deleted. Retry; if it keeps failing, report it at $(Get-Re
         Write-Host 'Running the installer...'
         $psi = [System.Diagnostics.ProcessStartInfo]::new($setup)
         $psi.UseShellExecute = $true   # explicit: the default differs between Windows PowerShell and 7.x
-        $proc = [System.Diagnostics.Process]::Start($psi)
+        $prevSkip = $env:TACK_SKIP_FIRSTRUN
+        $env:TACK_SKIP_FIRSTRUN = '1'   # inherited by Setup and the app it launches
+        try { $proc = [System.Diagnostics.Process]::Start($psi) }
+        finally { $env:TACK_SKIP_FIRSTRUN = $prevSkip }
         if (-not $proc) { throw "Could not start $SetupAsset." }
 
         # Bounded so a wedged installer (a UAC or antivirus prompt stuck behind another window) reports
@@ -137,9 +142,27 @@ The download has been deleted. Retry; if it keeps failing, report it at $(Get-Re
         if (-not $keepWork) { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
     }
 
+    # --- PATH --------------------------------------------------------------------------------------
+    # tack goes on the SYSTEM PATH only, never the user PATH. That write needs admin, so `tack setup` asks
+    # for it through a single UAC prompt (and does nothing if it's already in place). A declined prompt
+    # leaves tack installed but off PATH; the message below says how to retry.
+    $tackExe = Join-Path $env:LOCALAPPDATA 'Tack\current\tack.exe'
+    if (-not (Test-Path -LiteralPath $tackExe)) {
+        throw "Installed, but $tackExe is missing, so tack can't be put on the system PATH."
+    }
+    Write-Host ''
+    Write-Host 'Adding tack to the system PATH (this asks for admin via UAC)...'
+    & $tackExe setup
+    $setupOk = ($LASTEXITCODE -eq 0)
+
     Write-Host ''
     Write-Host "tack $tag is installed." -ForegroundColor Green
-    Write-Host '  Open a NEW terminal (so it picks up the updated PATH) and run:  tack --version' -ForegroundColor DarkGray
+    if ($setupOk) {
+        Write-Host '  Open a NEW terminal (so it picks up the updated PATH) and run:  tack --version' -ForegroundColor DarkGray
+    }
+    else {
+        Write-Warning "tack is NOT on the system PATH yet. Retry with:  & '$tackExe' setup"
+    }
     Write-Host '  Update later with:  tack update' -ForegroundColor DarkGray
 }
 

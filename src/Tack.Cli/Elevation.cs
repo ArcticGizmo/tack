@@ -6,9 +6,9 @@ using System.Security.Principal;
 namespace Tack.Cli;
 
 /// <summary>
-/// Admin detection and a UAC relaunch, used only by <c>tack doctor --fix</c> to perform the one write that
-/// needs elevation (the machine PATH). We deliberately relaunch just the tiny machine-PATH step elevated
-/// rather than run all of tack as admin.
+/// Admin detection and a UAC relaunch, used (via <see cref="SystemPath"/>) for the one write that needs
+/// elevation: the system PATH. We deliberately relaunch just the tiny machine-PATH step elevated rather than
+/// run all of tack as admin.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static class Elevation
@@ -26,8 +26,9 @@ internal static class Elevation
     public enum RelaunchOutcome { Succeeded, Failed, Cancelled }
 
     /// <summary>Relaunch this exe elevated with the given args, wait for it, and report how it went.
-    /// A UAC decline surfaces as <see cref="RelaunchOutcome.Cancelled"/> rather than an exception.</summary>
-    public static RelaunchOutcome RelaunchElevated(string arguments)
+    /// A UAC decline surfaces as <see cref="RelaunchOutcome.Cancelled"/> rather than an exception. With a
+    /// <paramref name="timeout"/>, a child still running when it expires counts as failed (and is left to finish).</summary>
+    public static RelaunchOutcome RelaunchElevated(string arguments, TimeSpan? timeout = null)
     {
         string? exe = Environment.ProcessPath;
         if (string.IsNullOrEmpty(exe)) return RelaunchOutcome.Failed;
@@ -44,7 +45,8 @@ internal static class Elevation
         {
             using var proc = Process.Start(psi);
             if (proc is null) return RelaunchOutcome.Failed;
-            proc.WaitForExit();
+            if (timeout is { } t) { if (!proc.WaitForExit(t)) return RelaunchOutcome.Failed; }
+            else proc.WaitForExit();
             return proc.ExitCode == 0 ? RelaunchOutcome.Succeeded : RelaunchOutcome.Failed;
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 1223) // ERROR_CANCELLED - user declined the UAC prompt

@@ -40,6 +40,34 @@ public static class PathEdits
         return SameByKey(entries, fixedUp, expand) ? null : string.Join(';', fixedUp);
     }
 
+    /// <summary>
+    /// The raw PATH with tack wired in: <paramref name="shimsDir"/> at the very front (it must win over every
+    /// other tool install) and <paramref name="installDir"/> appended if it's missing (it only needs to resolve).
+    /// Null when both are already in place and nothing needs writing.
+    /// </summary>
+    public static string? Register(string? rawPath, string shimsDir, string installDir, Func<string, string>? expand = null)
+    {
+        expand ??= Environment.ExpandEnvironmentVariables;
+        string current = PromoteFront(rawPath, shimsDir, behind: null, expand) ?? string.Join(';', Split(rawPath));
+        var entries = Split(current);
+        string install = Key(installDir, expand);
+        if (!entries.Any(p => Key(p, expand) == install))
+            entries.Add(Trim(installDir));
+
+        return SameByKey(Split(rawPath), entries, expand) ? null : string.Join(';', entries);
+    }
+
+    /// <summary>The raw PATH with every entry matching one of <paramref name="dirs"/> removed, or null if none
+    /// were on it.</summary>
+    public static string? Remove(string? rawPath, IEnumerable<string> dirs, Func<string, string>? expand = null)
+    {
+        expand ??= Environment.ExpandEnvironmentVariables;
+        var drop = new HashSet<string>(dirs.Select(d => Key(d, expand)));
+        var entries = Split(rawPath);
+        var kept = entries.Where(p => !drop.Contains(Key(p, expand))).ToList();
+        return kept.Count == entries.Count ? null : string.Join(';', kept);
+    }
+
     private static bool SameByKey(List<string> a, List<string> b, Func<string, string> expand)
     {
         if (a.Count != b.Count) return false;

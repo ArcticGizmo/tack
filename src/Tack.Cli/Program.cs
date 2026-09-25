@@ -7,13 +7,20 @@ using Velopack;
 // tack CLI.
 //
 // Velopack requires its bootstrap as the very first thing in the main exe's entry point. tack.exe is the
-// Velopack mainExe, so it owns the install lifecycle: on install/update it wires the shims dir + install dir
-// onto the user PATH AND regenerates shims from existing config with this build's shim binary; on uninstall
-// it strips the PATH entries. On a normal run these are no-ops and Run() returns. Then a Spectre.Console
-// command app dispatches. Every command is a thin shell over Tack.Core (Core decides; the CLI formats).
+// Velopack mainExe, so it owns the install lifecycle: on install/update it regenerates shims from existing
+// config with this build's shim binary; on the first run after install it puts the shims dir + install dir on
+// the SYSTEM PATH (one UAC prompt - tack never touches the user PATH); on uninstall it strips those entries.
+// On a normal run these are no-ops and Run() returns. Then a Spectre.Console command app dispatches. Every
+// command is a thin shell over Tack.Core (Core decides; the CLI formats).
 var velopack = VelopackApp.Build();
 if (OperatingSystem.IsWindows()) velopack = InstallHook.Wire(velopack);
 velopack.Run();
+
+if (OperatingSystem.IsWindows() && InstallHook.IsFirstRun)
+{
+    int setup = InstallHook.FirstTimeSetup();
+    if (args.Length == 0) return setup; // Setup's own launch: show the setup result, not the help screen
+}
 
 var app = new CommandApp();
 app.Configure(cfg =>
@@ -36,6 +43,8 @@ app.Configure(cfg =>
         tool.AddCommand<ToolsListCommand>("list")
             .WithDescription("List registered tools and versions (--expand for copyable paths).");
     }).WithAlias("tools");
+    cfg.AddCommand<SetupCommand>("setup")
+        .WithDescription("Put tack on the system PATH (prompts for elevation). Run by the installer; re-run if you declined.");
     cfg.AddCommand<DoctorCommand>("doctor")
         .WithDescription("Diagnose PATH and shim health (--fix to repair).");
     cfg.AddCommand<DisableCommand>("disable")
