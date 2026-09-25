@@ -29,19 +29,35 @@ public static class ConfigCompiler
             rc.Tools[toolName] = rt;
         }
 
-        // Sorted for deterministic output; the resolver doesn't depend on the order.
-        foreach (var z in ZoneRegistry.Sorted(c))
+        // Sorted for deterministic output; the resolver doesn't depend on the order. A zone for an unregistered
+        // tool (which includes the all-tools "*") has no list to join here.
+        var sorted = ZoneRegistry.Sorted(c);
+        foreach (var z in sorted)
         {
             if (!rc.Tools.TryGetValue(z.Tool, out var rt)) continue;
-            rt.Zones.Add(new ResolvedZone
-            {
-                Path = z.Path,
-                Key = ZonePath.Normalize(z.Path),
-                Version = z.Version,
-                Enforce = z.Enforce,
-            });
+            rt.Zones.Add(Resolve(z, allTools: false));
+        }
+
+        // All-tools zones are copied into every tool's list, so the resolver needs no special case. The tool's
+        // own zone at the same directory wins (more specific at the same depth), which also keeps the rule
+        // "at most one zone per tool per directory" the resolver relies on. Only `none` is meaningful for "*".
+        foreach (var z in sorted.Where(z => ZoneTool.IsAll(z.Tool) && ZoneVersion.IsNone(z.Version)))
+        {
+            string key = ZonePath.Normalize(z.Path);
+            foreach (var rt in rc.Tools.Values)
+                if (!rt.Zones.Any(existing => existing.Key == key))
+                    rt.Zones.Add(Resolve(z, allTools: true));
         }
 
         return rc;
     }
+
+    private static ResolvedZone Resolve(Zone z, bool allTools) => new()
+    {
+        Path = z.Path,
+        Key = ZonePath.Normalize(z.Path),
+        Version = z.Version,
+        Enforce = z.Enforce,
+        AllTools = allTools,
+    };
 }

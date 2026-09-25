@@ -85,7 +85,7 @@ public sealed class Resolver
         var enforced = NearestZone(rt.Zones, cwd, enforce: true);
         if (enforced is not null)
             return ZoneVersion.IsNone(enforced.Version)
-                ? Off(exposedName, tool, $"enforced zone {enforced.Path} sets {tool} to none")
+                ? Off(exposedName, tool, $"enforced zone {enforced.Path} sets {(enforced.AllTools ? "every tool" : tool)} to none")
                 : Select(exposedName, tool, rt, enforced.Version, ResolutionSource.EnforcedZone,
                     $"enforced zone {enforced.Path}");
 
@@ -104,7 +104,7 @@ public sealed class Resolver
         var zone = NearestZone(rt.Zones, cwd, enforce: false);
         if (zone is not null)
             return ZoneVersion.IsNone(zone.Version)
-                ? Off(exposedName, tool, $"zone {zone.Path} sets {tool} to none")
+                ? Off(exposedName, tool, $"zone {zone.Path} sets {(zone.AllTools ? "every tool" : tool)} to none")
                 : Select(exposedName, tool, rt, zone.Version, ResolutionSource.Zone, $"zone {zone.Path}");
 
         // 5. Central default.

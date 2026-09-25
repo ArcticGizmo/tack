@@ -47,6 +47,7 @@ public sealed class Zone
     /// <summary>An absolute directory, e.g. "C:\work\employer". Compared case- and separator-insensitively.</summary>
     public string Path { get; set; } = "";
 
+    /// <summary>A registered tool name, or <see cref="ZoneTool.All"/> for a zone that applies to every tool.</summary>
     public string Tool { get; set; } = "";
 
     /// <summary>A version (or prefix), or <see cref="ZoneVersion.None"/> to turn tack off for the tool here.</summary>
@@ -67,6 +68,18 @@ public static class ZoneVersion
 
     public static bool IsNone(string? version) =>
         string.Equals(version?.Trim(), None, StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>
+/// The reserved zone tool <c>*</c>: a zone for every registered tool - including ones registered later. Only
+/// <see cref="ZoneVersion.None"/> makes sense for it (one version can't fit every tool), so it means "tack is
+/// off here". A tool's own zone at the same directory beats it; see <see cref="ConfigCompiler"/>.
+/// </summary>
+public static class ZoneTool
+{
+    public const string All = "*";
+
+    public static bool IsAll(string? tool) => string.Equals(tool?.Trim(), All, StringComparison.Ordinal);
 }
 
 /// <summary>The pre-zones binding shape: a directory glob mapped to several tools. Read only for migration.</summary>

@@ -45,6 +45,11 @@ public sealed class ResolvedZone
 
     public string Version { get; set; } = "";
     public bool Enforce { get; set; }
+
+    /// <summary>True when this entry was copied in from an all-tools (<c>*</c>) zone - only used to explain
+    /// "why". Left out of resolved.json when false.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool AllTools { get; set; }
 }
 
 /// <summary>

@@ -171,6 +171,40 @@ public class CompilerTests
         Assert.False(ConfigCompiler.Compile(central).Tools.ContainsKey("ruby"));
     }
 
+    [Fact]
+    public void All_tools_zones_are_copied_into_every_tool_unless_it_has_its_own_zone_there()
+    {
+        var rc = ConfigCompiler.Compile(ResolverTests.AllToolsConfig());
+
+        Assert.False(rc.Tools.ContainsKey("*")); // not a tool
+        var pyLegacy = Assert.Single(rc.Tools["python"].Zones, z => z.Key == "c:/work/legacy");
+        Assert.True(pyLegacy.AllTools);
+        Assert.Equal("none", pyLegacy.Version);
+
+        // C:\mixed: python gets the all-tools zone; node keeps only its own zone there.
+        Assert.Single(rc.Tools["python"].Zones, z => z.Key == "c:/mixed" && z.AllTools);
+        var nodeMixed = Assert.Single(rc.Tools["node"].Zones, z => z.Key == "c:/mixed");
+        Assert.False(nodeMixed.AllTools);
+        Assert.Equal("18", nodeMixed.Version);
+    }
+
+    [Fact]
+    public void An_all_tools_zone_with_a_real_version_is_ignored()
+    {
+        var central = Sample();
+        central.Zones.Add(new Zone { Path = @"C:\bad", Tool = "*", Version = "18" }); // hand-edited config
+        Assert.DoesNotContain(ConfigCompiler.Compile(central).Tools["node"].Zones, z => z.Key == "c:/bad");
+    }
+
+    [Fact]
+    public void AllTools_is_left_out_of_resolved_json_when_false()
+    {
+        string json = System.Text.Json.JsonSerializer.Serialize(
+            ConfigCompiler.Compile(ResolverTests.AllToolsConfig()), TackJson.Default.ResolvedConfig);
+        Assert.Contains("\"allTools\": true", json);
+        Assert.DoesNotContain("\"allTools\": false", json);
+    }
+
     internal static CentralConfig Sample()
     {
         return new CentralConfig
@@ -353,6 +387,63 @@ public class ResolverTests
     {
         var env = new Dictionary<string, string> { ["TACK_NODE_VERSION"] = "18.19.0" };
         Assert.Equal(ResolutionSource.EnvOverride, NoneResolver().Resolve("node", @"C:\work\legacy", Ctx(env: env)).Source);
+    }
+
+    // Sample() plus python (with a default), an all-tools none zone at C:\work\legacy, node back on in
+    // C:\work\legacy\app, and a node zone at the SAME directory as an all-tools zone at C:\mixed.
+    internal static CentralConfig AllToolsConfig()
+    {
+        var c = CompilerTests.Sample();
+        c.Tools["python"] = new RegisteredTool
+        {
+            Versions = { ["3.12.1"] = new InstalledVersion { BinDir = @"C:\tools\py312", Exposes = { "python", "pip" } } },
+        };
+        c.Defaults["python"] = "3.12.1";
+        c.Zones.Add(new Zone { Path = @"C:\work\legacy", Tool = "*", Version = "none" });
+        c.Zones.Add(new Zone { Path = @"C:\work\legacy\app", Tool = "node", Version = "20" });
+        c.Zones.Add(new Zone { Path = @"C:\mixed", Tool = "*", Version = "none" });
+        c.Zones.Add(new Zone { Path = @"C:\mixed", Tool = "node", Version = "18" });
+        return c;
+    }
+
+    private static Resolver AllToolsResolver() => new(ConfigCompiler.Compile(AllToolsConfig()));
+
+    [Fact]
+    public void All_tools_none_zone_switches_off_every_tool()
+    {
+        var resolver = AllToolsResolver();
+        foreach (var cmd in new[] { "node", "npm", "python", "pip" })
+        {
+            var r = resolver.Resolve(cmd, @"C:\work\legacy\x", Ctx());
+            Assert.Equal(ResolutionSource.ZoneNone, r.Source);
+            Assert.Equal(@"zone C:\work\legacy sets every tool to none", r.Detail);
+        }
+    }
+
+    [Fact]
+    public void A_deeper_tool_zone_switches_just_that_tool_back_on()
+    {
+        var resolver = AllToolsResolver();
+        Assert.Equal("20.11.0", resolver.Resolve("node", @"C:\work\legacy\app", Ctx()).Version);
+        Assert.Equal(ResolutionSource.ZoneNone, resolver.Resolve("python", @"C:\work\legacy\app", Ctx()).Source);
+    }
+
+    [Fact]
+    public void A_tools_own_zone_beats_an_all_tools_zone_at_the_same_directory()
+    {
+        var resolver = AllToolsResolver();
+        var node = resolver.Resolve("node", @"C:\mixed", Ctx());
+        Assert.Equal(ResolutionSource.Zone, node.Source);
+        Assert.Equal("18.19.0", node.Version);
+        Assert.Equal(ResolutionSource.ZoneNone, resolver.Resolve("python", @"C:\mixed", Ctx()).Source);
+    }
+
+    [Fact]
+    public void TackYml_beats_a_non_enforced_all_tools_zone()
+    {
+        var files = new Dictionary<string, string> { [@"C:\work\legacy\x\tack.yml"] = "tools:\n  python: 3.12\n" };
+        var r = AllToolsResolver().Resolve("python", @"C:\work\legacy\x", Ctx(files: files));
+        Assert.Equal(ResolutionSource.TackYml, r.Source);
     }
 
     [Fact]
