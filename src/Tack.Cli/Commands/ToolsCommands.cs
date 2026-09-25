@@ -132,9 +132,16 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
 
 // ---- tool list -----------------------------------------------------------------------------------
 
-public sealed class ToolsListCommand : Command
+public sealed class ToolsListSettings : CommandSettings
 {
-    public override int Execute(CommandContext context)
+    [CommandOption("-e|--expand")]
+    [Description("List each version as plain lines instead of a table, so paths never wrap and copy cleanly.")]
+    public bool Expand { get; init; }
+}
+
+public sealed class ToolsListCommand : Command<ToolsListSettings>
+{
+    public override int Execute(CommandContext context, ToolsListSettings settings)
     {
         var env = new TackEnvironment();
         var config = env.Load();
@@ -148,28 +155,76 @@ public sealed class ToolsListCommand : Command
         var ctx = env.Context();
         string cwd = Environment.CurrentDirectory;
 
-        var table = new Table().RoundedBorder();
-        table.AddColumn("tool");
-        table.AddColumn("versions");
-        table.AddColumn("default");
-        table.AddColumn("here");
-        table.AddColumn("commands");
+        // One entry per version, so each install's own directory is visible.
+        var rows = new List<Row>();
         foreach (var (name, tool) in config.Tools.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
         {
-            string versions = string.Join(", ", tool.Versions.Keys.OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
-            string def = config.Defaults.TryGetValue(name, out var d) ? d : "-";
+            string? def = config.Defaults.TryGetValue(name, out var d) ? d : null;
             var r = resolver.Resolve(name, cwd, ctx);
-            string here = r.Resolved ? r.Version! : "-";
-            // The command names tack intercepts for this tool (union across versions).
-            string commands = string.Join(", ", tool.Versions.Values
-                .SelectMany(v => v.Exposes)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
-            table.AddRow(Markup.Escape(name), Markup.Escape(versions), Markup.Escape(def), Markup.Escape(here),
-                $"[grey]{Markup.Escape(commands)}[/]");
+            string? here = r.Resolved ? r.Version : null;
+
+            foreach (var (version, installed) in tool.Versions.OrderBy(v => v.Key, StringComparer.OrdinalIgnoreCase))
+                rows.Add(new Row(name, version, installed.BinDir,
+                    // The command names tack intercepts for this version.
+                    string.Join(", ", installed.Exposes.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)),
+                    IsDefault: string.Equals(version, def, StringComparison.OrdinalIgnoreCase),
+                    IsHere: string.Equals(version, here, StringComparison.OrdinalIgnoreCase),
+                    Missing: !Directory.Exists(installed.BinDir)));
+        }
+
+        if (settings.Expand) WriteExpanded(rows);
+        else WriteTable(rows);
+
+        if (rows.Any(x => x.Missing))
+            AnsiConsole.MarkupLine("[yellow]note:[/] a registered folder is missing - re-add it with [green]tack tool add --path[/], or remove it with [green]tack tool remove[/].");
+        return 0;
+    }
+
+    private sealed record Row(string Tool, string Version, string BinDir, string Commands,
+        bool IsDefault, bool IsHere, bool Missing);
+
+    /// <summary>The compact view. The tool name is shown on its first row only; the version cell carries the
+    /// default / resolves-here markers. Long paths wrap inside their cell - <c>--expand</c> is for copying.</summary>
+    private static void WriteTable(List<Row> rows)
+    {
+        var table = new Table().RoundedBorder();
+        table.AddColumn("tool");
+        table.AddColumn(new TableColumn("version").NoWrap());
+        table.AddColumn("path");
+        table.AddColumn("commands");
+        string? previous = null;
+        foreach (var x in rows)
+        {
+            string versionCell = Markup.Escape(x.Version)
+                + (x.IsDefault ? " [grey]default[/]" : "")
+                + (x.IsHere ? " [green]here[/]" : "");
+            string pathCell = x.Missing
+                ? $"[red]{Markup.Escape(x.BinDir)} (missing)[/]"
+                : Markup.Escape(x.BinDir);
+            table.AddRow(x.Tool == previous ? "" : Markup.Escape(x.Tool), versionCell, pathCell,
+                $"[grey]{Markup.Escape(x.Commands)}[/]");
+            previous = x.Tool;
         }
         AnsiConsole.Write(table);
-        return 0;
+    }
+
+    /// <summary>The copy-friendly view: a block of plain lines per version. The path line goes straight to stdout
+    /// rather than through Spectre, which hard-wraps at the console width - the terminal's own soft wrap copies
+    /// back as one line.</summary>
+    private static void WriteExpanded(List<Row> rows)
+    {
+        bool first = true;
+        foreach (var x in rows)
+        {
+            if (!first) Console.WriteLine();
+            first = false;
+            AnsiConsole.MarkupLine($"[bold]{Markup.Escape(x.Tool)}@{Markup.Escape(x.Version)}[/]"
+                + (x.IsDefault ? " [grey]default[/]" : "")
+                + (x.IsHere ? " [green]here[/]" : "")
+                + (x.Missing ? " [red]missing[/]" : ""));
+            Console.WriteLine($"  path:     {x.BinDir}");
+            Console.WriteLine($"  commands: {x.Commands}");
+        }
     }
 }
 

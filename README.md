@@ -75,7 +75,8 @@ A zone is a plain directory, and it covers itself and everything under it. Every
 ```powershell
 tack tool add node@20.11.0                       # finds node on PATH for you
 tack tool add node@18.19.0 --path C:\node\18.19  # or point at the install
-tack tool list
+tack tool list                                   # every version, its folder, default and what resolves here
+tack tool list --expand                          # the same as plain lines, for copying paths
 tack tool remove                                 # interactive multi-select
 ```
 

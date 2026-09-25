@@ -9,6 +9,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.1.2] - 2026-09-25
+
+- `tack tool list` shows every version with the folder it runs from
+- Registered folders that have vanished are flagged in red
+- `tack tool list --expand` for paths that copy out in one piece, not table-cell-sized chunks
+
+---
+
 ## [v0.1.1] - 2026-09-25
 
 - `npx` works again (tack had been trying to run node's bash script)

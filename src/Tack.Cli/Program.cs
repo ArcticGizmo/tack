@@ -34,7 +34,7 @@ app.Configure(cfg =>
         tool.AddCommand<ToolsRemoveCommand>("remove")
             .WithDescription("Remove tool versions (interactive picker when no version is given).");
         tool.AddCommand<ToolsListCommand>("list")
-            .WithDescription("List registered tools and versions.");
+            .WithDescription("List registered tools and versions (--expand for copyable paths).");
     }).WithAlias("tools");
     cfg.AddCommand<DoctorCommand>("doctor")
         .WithDescription("Diagnose PATH and shim health (--fix to repair).");
