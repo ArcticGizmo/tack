@@ -8,6 +8,12 @@
     <RootNamespace>Tack.Cli</RootNamespace>
     <AssemblyName>tack</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- Trim the self-contained publish (no effect on build/run/test). Partial, not full: only assemblies that
+         declare themselves trim-safe (the runtime's own) are trimmed, while tack, Spectre.Console.Cli (which
+         discovers commands and settings by reflection), YamlDotNet and Velopack are kept whole. -->
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
   </PropertyGroup>
 
   <ItemGroup>

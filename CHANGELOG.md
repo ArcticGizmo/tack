@@ -9,6 +9,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.1.3] - 2026-09-25
+
+- `tack.exe` is a third of its former size (24 MB of runtime it never called, gone)
+
+---
+
 ## [v0.1.2] - 2026-09-25
 
 - `tack tool list` shows every version with the folder it runs from

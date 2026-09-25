@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Tack.Core;
 using Tack.Core.Platform;
 
@@ -12,12 +13,6 @@ namespace Tack.Cli;
 /// </summary>
 internal static class PathFixBackup
 {
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        WriteIndented = true,
-        PropertyNameCaseInsensitive = true,
-    };
-
     public static string NewPath() =>
         Path.Combine(TackPaths.Root, "path-backups", $"path-fix-{DateTime.Now:yyyyMMdd-HHmmss}.json");
 
@@ -32,7 +27,7 @@ internal static class PathFixBackup
                 Timestamp = DateTime.Now.ToString("o"),
                 Machine = Scope.From(machine),
             };
-            File.WriteAllText(path, JsonSerializer.Serialize(record, Options));
+            File.WriteAllText(path, JsonSerializer.Serialize(record, PathFixBackupJson.Default.Record));
             return path;
         }
         catch { return null; }
@@ -43,7 +38,7 @@ internal static class PathFixBackup
     {
         try
         {
-            var record = JsonSerializer.Deserialize<Record>(File.ReadAllText(path), Options);
+            var record = JsonSerializer.Deserialize(File.ReadAllText(path), PathFixBackupJson.Default.Record);
             return record?.Machine is { } m ? new PathChange("machine", m.Before, m.After) : null;
         }
         catch { return null; }
@@ -62,3 +57,9 @@ internal static class PathFixBackup
         public static Scope? From(PathChange? c) => c is null ? null : new Scope { Before = c.Before, After = c.After };
     }
 }
+
+// Source-generated rather than reflection-based: the published CLI is trimmed, which switches reflection-based
+// System.Text.Json off - and Save/ReadMachine swallow the resulting exception, so the backup would silently vanish.
+[JsonSourceGenerationOptions(WriteIndented = true, PropertyNameCaseInsensitive = true)]
+[JsonSerializable(typeof(PathFixBackup.Record))]
+internal sealed partial class PathFixBackupJson : JsonSerializerContext { }
