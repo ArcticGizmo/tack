@@ -74,13 +74,13 @@ A zone is a plain directory, and it covers itself and everything under it. Every
 
 ```powershell
 tack tool add node@20.11.0                       # finds node on PATH for you
-tack tool add node@18.19.0 --path C:\node\18.19  # or point at the install
+tack tool add node@18.19.0 C:\node\18.19         # or point at the install (--path works too)
 tack tool list                                   # every version, its folder, default and what resolves here
 tack tool list --expand                          # the same as plain lines, for copying paths
 tack tool remove                                 # interactive multi-select
 ```
 
-`tool add` works out which commands an install provides by scanning its folder (override with `--exposes node,npm,npx`). Leave out `--path` and it finds the tool on PATH the way `where` does, skipping tack's own shims. If there's more than one match, you pick. PATH entries like `%NVM_HOME%` are expanded, so an nvm-windows install is registered by its real directory.
+`tool add` works out which commands an install provides by scanning its folder (override with `--exposes node,npm,npx`). Leave out the folder and it finds the tool on PATH the way `where` does, skipping tack's own shims. If there's more than one match, you pick. PATH entries like `%NVM_HOME%` are expanded, so an nvm-windows install is registered by its real directory.
 
 Removing a version tidies up after itself: a tool left with nothing is dropped, a default pointing at the removed version moves to the highest one left, and any zone still pointing at it is flagged for you to fix.
 

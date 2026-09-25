@@ -16,9 +16,16 @@ public sealed class ToolsAddSettings : CommandSettings
     [Description("e.g. node@20.11.0")]
     public string Spec { get; init; } = "";
 
-    [CommandOption("--path <BINDIR>")]
+    [CommandArgument(1, "[binDir]")]
     [Description("The directory holding the tool's executables. Omit to discover it from PATH (like 'where').")]
-    public string BinDir { get; init; } = "";
+    public string? PositionalBinDir { get; init; }
+
+    [CommandOption("--path <BINDIR>")]
+    [Description("Same as the binDir argument, for those who like to spell it out.")]
+    public string? PathOption { get; init; }
+
+    /// <summary>The binDir from whichever of the positional or --path was given (empty if neither).</summary>
+    public string BinDir => PositionalBinDir is { Length: > 0 } p ? p : PathOption ?? "";
 
     [CommandOption("--exposes <NAMES>")]
     [Description("Comma-separated binary names; auto-detected from the binDir if omitted.")]
@@ -29,6 +36,8 @@ public sealed class ToolsAddSettings : CommandSettings
         var s = ToolSpec.Parse(Spec);
         if (string.IsNullOrEmpty(s.Tool) || string.IsNullOrEmpty(s.Version))
             return ValidationResult.Error("Specify tool@version, e.g. node@20.11.0");
+        if (!string.IsNullOrWhiteSpace(PositionalBinDir) && !string.IsNullOrWhiteSpace(PathOption))
+            return ValidationResult.Error("Give the binDir once - either as the second argument or with --path, not both.");
         return ValidationResult.Success();
     }
 }
@@ -48,7 +57,9 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
         }
         else
         {
-            binDir = Path.GetFullPath(settings.BinDir);
+            // Relative paths (., ./bin, ../../node) resolve against the cwd; drop any trailing slash so
+            // `.` and `.\` register the same binDir. (Roots like C:\ keep theirs.)
+            binDir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(settings.BinDir));
         }
 
         if (!Directory.Exists(binDir))
@@ -86,7 +97,7 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
 
     /// <summary>Discover the tool's binDir from PATH (like `where`), excluding tack's own dirs. One hit is used
     /// directly; several open an interactive pick; none (or a non-interactive terminal with several) fails with
-    /// guidance to pass --path. Returns null on failure/cancel, with <paramref name="failure"/> the exit code.</summary>
+    /// guidance to pass the binDir. Returns null on failure/cancel, with <paramref name="failure"/> the exit code.</summary>
     private static string? DiscoverBinDir(TackEnvironment env, string tool, out int failure)
     {
         failure = 0;
@@ -99,7 +110,7 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
 
         if (matches.Count == 0)
         {
-            AnsiConsole.MarkupLine($"[red]couldn't find '{Markup.Escape(tool)}' on PATH.[/] Pass [green]--path <binDir>[/] to point at its install.");
+            AnsiConsole.MarkupLine($"[red]couldn't find '{Markup.Escape(tool)}' on PATH.[/] Pass its install folder: [green]tack tool add {Markup.Escape(tool)}@<version> <binDir>[/].");
             failure = 1;
             return null;
         }
@@ -112,7 +123,7 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
 
         if (!AnsiConsole.Profile.Capabilities.Interactive)
         {
-            AnsiConsole.MarkupLine($"[yellow]'{Markup.Escape(tool)}' was found in several places.[/] Re-run with [green]--path <binDir>[/]:");
+            AnsiConsole.MarkupLine($"[yellow]'{Markup.Escape(tool)}' was found in several places.[/] Re-run with one as the [green]<binDir>[/] argument:");
             foreach (var m in matches)
                 AnsiConsole.MarkupLine($"  [grey]{Markup.Escape(m.ExePath)}[/]");
             failure = 1;
@@ -176,7 +187,7 @@ public sealed class ToolsListCommand : Command<ToolsListSettings>
         else WriteTable(rows);
 
         if (rows.Any(x => x.Missing))
-            AnsiConsole.MarkupLine("[yellow]note:[/] a registered folder is missing - re-add it with [green]tack tool add --path[/], or remove it with [green]tack tool remove[/].");
+            AnsiConsole.MarkupLine("[yellow]note:[/] a registered folder is missing - re-add it with [green]tack tool add <tool@version> <binDir>[/], or remove it with [green]tack tool remove[/].");
         return 0;
     }
 

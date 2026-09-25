@@ -9,6 +9,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.1.5] - 2026-09-25
+
+- `tool add` takes the install folder as a second argument (`--path` was always forgotten anyway)
+- `.` and `.\` now register as the same folder
+
+---
+
 ## [v0.1.4] - 2026-09-25
 
 - tack keeps its hands off your user PATH (system PATH only, as promised)
