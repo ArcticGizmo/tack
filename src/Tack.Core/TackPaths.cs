@@ -32,7 +32,7 @@ public static class TackPaths
     }
 
     /// <summary>Every tack shims dir on this machine - live and parked, for BOTH profiles. A dev instance sits on
-    /// PATH behind the release one, so anything that hunts PATH for a "real" tool (e.g. <c>tools add</c>
+    /// PATH behind the release one, so anything that hunts PATH for a "real" tool (e.g. <c>tool add</c>
     /// discovery) must skip the other profile's shims too, not just its own.</summary>
     public static IReadOnlyList<string> AllShimsDirs
     {

@@ -6,7 +6,7 @@ namespace Tack.Core.Config;
 public sealed record ZoneSetResult(bool Added, Zone? Previous);
 
 /// <summary>
-/// Read/mutate helpers over the central zones behind the CLI's <c>tack zones</c> commands. A
+/// Read/mutate helpers over the central zones behind the CLI's <c>tack zone</c> commands. A
 /// zone is keyed by (directory, tool): setting one that exists replaces it rather than adding a rival, so two
 /// zones can never disagree about the same tool in the same directory. Pure (no filesystem).
 /// </summary>

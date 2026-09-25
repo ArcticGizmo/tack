@@ -6,7 +6,7 @@ using Tack.Core.Resolution;
 
 namespace Tack.Cli.Commands;
 
-// ---- zones add -----------------------------------------------------------------------------------
+// ---- zone add ------------------------------------------------------------------------------------
 
 public sealed class ZonesAddSettings : CommandSettings
 {
@@ -15,7 +15,7 @@ public sealed class ZonesAddSettings : CommandSettings
     public string Dir { get; init; } = "";
 
     [CommandArgument(1, "<tool@version>")]
-    [Description("e.g. node@18.19.0 (a prefix like node@18 picks the highest registered 18.x)")]
+    [Description("e.g. node@18.19.0 (a prefix like node@18 picks the highest registered 18.x), or node@none to turn tack off for node here")]
     public string Spec { get; init; } = "";
 
     [CommandOption("--enforce")]
@@ -41,31 +41,35 @@ public sealed class ZonesAddCommand : Command<ZonesAddSettings>
         var env = new TackEnvironment();
         var spec = ToolSpec.Parse(settings.Spec);
         string dir = Path.GetFullPath(settings.Dir);
+        bool none = ZoneVersion.IsNone(spec.Version);
+        string version = none ? ZoneVersion.None : spec.Version!;
         var config = env.Load();
 
-        var result = ZoneRegistry.Set(config, dir, spec.Tool, spec.Version!, settings.Enforce);
+        var result = ZoneRegistry.Set(config, dir, spec.Tool, version, settings.Enforce);
         env.Save(config);
 
-        string what = $"{Markup.Escape(dir)} -> {Markup.Escape(spec.Tool)}@{Markup.Escape(spec.Version!)}"
+        string what = $"{Markup.Escape(dir)} -> {Markup.Escape(spec.Tool)}@{Markup.Escape(version)}"
             + (settings.Enforce ? " [red](enforced)[/]" : "");
         if (result.Previous is { } p)
             AnsiConsole.MarkupLine($"[green]updated zone[/] {what} [grey](was {Markup.Escape(p.Version)}{(p.Enforce ? ", enforced" : "")})[/]");
         else
             AnsiConsole.MarkupLine($"[green]added zone[/] {what}");
 
+        if (none)
+            AnsiConsole.MarkupLine($"[grey]tack won't resolve {Markup.Escape(spec.Tool)} here or below (unless {(settings.Enforce ? "a deeper enforced zone" : "a deeper zone or a tack.yml")} says otherwise) - it goes to the next one on PATH.[/]");
         if (!Directory.Exists(dir))
             AnsiConsole.MarkupLine("[yellow]note:[/] that directory doesn't exist yet - the zone applies once it does.");
         if (!config.Tools.TryGetValue(spec.Tool, out var tool))
-            AnsiConsole.MarkupLine($"[yellow]note:[/] '{Markup.Escape(spec.Tool)}' isn't registered, so this zone does nothing until it is ([green]tack tools add[/]).");
-        else if (VersionMatch.Best(tool.Versions.Keys, spec.Version!) is null)
-            AnsiConsole.MarkupLine($"[yellow]note:[/] no registered {Markup.Escape(spec.Tool)} version matches '{Markup.Escape(spec.Version!)}' - commands here will fail until one is added.");
+            AnsiConsole.MarkupLine($"[yellow]note:[/] '{Markup.Escape(spec.Tool)}' isn't registered, so this zone does nothing until it is ([green]tack tool add[/]).");
+        else if (!none && VersionMatch.Best(tool.Versions.Keys, version) is null)
+            AnsiConsole.MarkupLine($"[yellow]note:[/] no registered {Markup.Escape(spec.Tool)} version matches '{Markup.Escape(version)}' - commands here will fail until one is added.");
 
         Mutations.ReportReshim(env.Reshim(config));
         return 0;
     }
 }
 
-// ---- zones list ----------------------------------------------------------------------------------
+// ---- zone list -----------------------------------------------------------------------------------
 
 public sealed class ZonesListCommand : Command
 {
@@ -75,7 +79,7 @@ public sealed class ZonesListCommand : Command
         var zones = ZoneRegistry.Sorted(config);
         if (zones.Count == 0)
         {
-            AnsiConsole.MarkupLine("[yellow]No zones.[/] Use [green]tack zones add <dir> tool@version[/] to add one.");
+            AnsiConsole.MarkupLine("[yellow]No zones.[/] Use [green]tack zone add <dir> tool@version[/] to add one.");
             return 0;
         }
 
@@ -85,14 +89,15 @@ public sealed class ZonesListCommand : Command
         table.AddColumn("version");
         table.AddColumn("enforced");
         foreach (var z in zones)
-            table.AddRow(Markup.Escape(z.Path), Markup.Escape(z.Tool), Markup.Escape(z.Version),
+            table.AddRow(Markup.Escape(z.Path), Markup.Escape(z.Tool),
+                ZoneVersion.IsNone(z.Version) ? "[yellow]none[/] [grey](tack off)[/]" : Markup.Escape(z.Version),
                 z.Enforce ? "[red]yes[/]" : "");
         AnsiConsole.Write(table);
         return 0;
     }
 }
 
-// ---- zones remove --------------------------------------------------------------------------------
+// ---- zone remove ---------------------------------------------------------------------------------
 
 public sealed class ZonesRemoveSettings : CommandSettings
 {
@@ -136,7 +141,7 @@ public sealed class ZonesRemoveCommand : Command<ZonesRemoveSettings>
             if (removed.Count == 0)
             {
                 string which = string.IsNullOrWhiteSpace(settings.Tool) ? "" : $" for '{settings.Tool}'";
-                AnsiConsole.MarkupLine($"[red]no zone at {Markup.Escape(dir)}{Markup.Escape(which)}.[/] See [green]tack zones list[/].");
+                AnsiConsole.MarkupLine($"[red]no zone at {Markup.Escape(dir)}{Markup.Escape(which)}.[/] See [green]tack zone list[/].");
                 return 1;
             }
         }

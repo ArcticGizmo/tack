@@ -8,7 +8,7 @@ public sealed record RemovalResult(
     IReadOnlyList<string> OrphanedZones);    // zones now pointing at a version that no longer exists
 
 /// <summary>
-/// Read/mutate helpers over the central registry that the CLI's <c>tack tools</c> commands share. Pure (no
+/// Read/mutate helpers over the central registry that the CLI's <c>tack tool</c> commands share. Pure (no
 /// filesystem), so removal - with its default-repointing and zone fallout - is unit-testable without disk.
 /// </summary>
 public static class ToolRegistry
@@ -75,10 +75,10 @@ public static class ToolRegistry
             }
         }
 
-        // Zones that now point at a missing tool/version (warn only).
+        // Zones that now point at a missing tool/version (warn only). A none zone names no version to lose.
         var orphaned = new List<string>();
         foreach (var z in config.Zones)
-            if (!Exists(config, z.Tool, z.Version))
+            if (!ZoneVersion.IsNone(z.Version) && !Exists(config, z.Tool, z.Version))
                 orphaned.Add($"{z.Path} ({z.Tool}@{z.Version})");
 
         return new RemovalResult(removed, dropped, repointed, orphaned);

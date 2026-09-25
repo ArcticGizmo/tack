@@ -8,7 +8,7 @@ using Tack.Core.Resolution;
 
 namespace Tack.Cli.Commands;
 
-// ---- tools add -----------------------------------------------------------------------------------
+// ---- tool add ------------------------------------------------------------------------------------
 
 public sealed class ToolsAddSettings : CommandSettings
 {
@@ -130,7 +130,7 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
     }
 }
 
-// ---- tools list ----------------------------------------------------------------------------------
+// ---- tool list -----------------------------------------------------------------------------------
 
 public sealed class ToolsListCommand : Command
 {
@@ -140,7 +140,7 @@ public sealed class ToolsListCommand : Command
         var config = env.Load();
         if (config.Tools.Count == 0)
         {
-            AnsiConsole.MarkupLine("[yellow]No tools registered.[/] Use [green]tack tools add[/] to add one.");
+            AnsiConsole.MarkupLine("[yellow]No tools registered.[/] Use [green]tack tool add[/] to add one.");
             return 0;
         }
 
@@ -173,7 +173,7 @@ public sealed class ToolsListCommand : Command
     }
 }
 
-// ---- tools remove --------------------------------------------------------------------------------
+// ---- tool remove ---------------------------------------------------------------------------------
 
 public sealed class ToolsRemoveSettings : CommandSettings
 {
@@ -211,7 +211,7 @@ public sealed class ToolsRemoveCommand : Command<ToolsRemoveSettings>
         foreach (var r in result.DefaultsRepointed)
             AnsiConsole.MarkupLine($"[grey]default repointed:[/] {Markup.Escape(r)}");
         foreach (var z in result.OrphanedZones)
-            AnsiConsole.MarkupLine($"[yellow]zone now points at a removed version:[/] {Markup.Escape(z)} [grey](edit with tack zones)[/]");
+            AnsiConsole.MarkupLine($"[yellow]zone now points at a removed version:[/] {Markup.Escape(z)} [grey](edit with tack zone)[/]");
 
         Mutations.ReportReshim(env.Reshim(config));
         return 0;

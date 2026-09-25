@@ -301,6 +301,60 @@ public class ResolverTests
         Assert.Equal(ResolutionSource.VersionNotInstalled, r.Source);
     }
 
+    // Sample() plus: C:\work\legacy switches node off, C:\work\legacy\revived switches it back on, and C:\corp\free
+    // is an enforced none zone inside the enforced C:\corp one.
+    private static Resolver NoneResolver()
+    {
+        var c = CompilerTests.Sample();
+        c.Zones.Add(new Zone { Path = @"C:\work\legacy", Tool = "node", Version = "none" });
+        c.Zones.Add(new Zone { Path = @"C:\work\legacy\revived", Tool = "node", Version = "20" });
+        c.Zones.Add(new Zone { Path = @"C:\corp\free", Tool = "node", Version = "None", Enforce = true });
+        return new Resolver(ConfigCompiler.Compile(c));
+    }
+
+    [Fact]
+    public void None_zone_switches_off_an_ancestor_zone_and_the_default()
+    {
+        var r = NoneResolver().Resolve("npm", @"C:\work\legacy\app", Ctx());
+        Assert.Equal(ResolutionSource.ZoneNone, r.Source);
+        Assert.False(r.Resolved);
+        Assert.Null(r.Version);
+        Assert.Equal("node", r.Tool);
+        Assert.Equal(@"zone C:\work\legacy sets node to none", r.Detail);
+    }
+
+    [Fact]
+    public void Deeper_zone_switches_tack_back_on_under_a_none_zone()
+    {
+        var r = NoneResolver().Resolve("node", @"C:\work\legacy\revived\src", Ctx());
+        Assert.Equal(ResolutionSource.Zone, r.Source);
+        Assert.Equal("20.11.0", r.Version);
+    }
+
+    [Fact]
+    public void TackYml_beats_a_non_enforced_none_zone()
+    {
+        var files = new Dictionary<string, string> { [@"C:\work\legacy\app\tack.yml"] = "tools:\n  node: 18\n" };
+        var r = NoneResolver().Resolve("node", @"C:\work\legacy\app", Ctx(files: files));
+        Assert.Equal(ResolutionSource.TackYml, r.Source);
+    }
+
+    [Fact]
+    public void Enforced_none_zone_beats_tack_yml_and_the_enforced_zone_above_it()
+    {
+        var files = new Dictionary<string, string> { [@"C:\corp\free\x\tack.yml"] = "tools:\n  node: 20\n" };
+        var r = NoneResolver().Resolve("node", @"C:\corp\free\x", Ctx(files: files));
+        Assert.Equal(ResolutionSource.ZoneNone, r.Source);
+        Assert.StartsWith(@"enforced zone C:\corp\free", r.Detail);
+    }
+
+    [Fact]
+    public void Env_override_still_beats_a_none_zone()
+    {
+        var env = new Dictionary<string, string> { ["TACK_NODE_VERSION"] = "18.19.0" };
+        Assert.Equal(ResolutionSource.EnvOverride, NoneResolver().Resolve("node", @"C:\work\legacy", Ctx(env: env)).Source);
+    }
+
     [Fact]
     public void Passthrough_when_no_default_and_no_rule()
     {

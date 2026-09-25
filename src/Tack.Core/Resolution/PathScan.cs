@@ -5,7 +5,7 @@ public sealed record PathMatch(string BinDir, string ExePath);
 
 /// <summary>
 /// Finds every place a named tool lives on PATH - the in-process equivalent of Windows <c>where</c>, used by
-/// <c>tack tools add</c> to offer a pick-list instead of making the user hunt down the binDir by hand. Walks
+/// <c>tack tool add</c> to offer a pick-list instead of making the user hunt down the binDir by hand. Walks
 /// the effective PATH in resolution order (machine entries, then user entries), probes the exec extensions via
 /// <see cref="BinaryLocator"/>, dedupes by directory, and skips excluded dirs - tack's own shims dir above all,
 /// so it never offers the shim as if it were the real tool. PATH access and file existence are injected so it's

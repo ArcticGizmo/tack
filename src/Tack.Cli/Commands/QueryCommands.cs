@@ -22,7 +22,7 @@ public sealed class InfoCommand : Command<InfoSettings>
         var config = env.Load();
         if (config.Tools.Count == 0)
         {
-            AnsiConsole.MarkupLine("[yellow]No tools registered.[/] Use [green]tack tools add[/] to add one.");
+            AnsiConsole.MarkupLine("[yellow]No tools registered.[/] Use [green]tack tool add[/] to add one.");
             return 0;
         }
 

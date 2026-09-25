@@ -59,6 +59,11 @@ try
         case ResolutionSource.VersionNotInstalled:
             return Fail(res.Detail ?? "resolved version is not installed");
 
+        // A none zone: tack is switched off for this tool here, on purpose - so always pass through, whatever
+        // noResolution says.
+        case ResolutionSource.ZoneNone:
+            return Passthrough(exposed, args);
+
         // Nothing resolved, or a stale shim for an unregistered name. Default behaviour is to stay invisible:
         // pass through to the next matching binary on PATH. `error` mode fails instead.
         case ResolutionSource.Passthrough:

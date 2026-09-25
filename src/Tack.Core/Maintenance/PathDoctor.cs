@@ -120,10 +120,10 @@ public static class PathDoctor
         foreach (var glob in ZoneRegistry.Unmigrated(config))
             report.Add($"Binding '{glob}' no longer applies", CheckStatus.Fail,
                 "zones take a plain directory (everything under it is included); re-add it with " +
-                "'tack zones add <dir> tool@version' and delete it from the bindings list in config.json");
+                "'tack zone add <dir> tool@version' and delete it from the bindings list in config.json");
 
         if (names.Count == 0)
-            report.Add("No tools registered", CheckStatus.Warn, "use 'tack tools add' to add an install");
+            report.Add("No tools registered", CheckStatus.Warn, "use 'tack tool add' to add an install");
 
         return report;
     }

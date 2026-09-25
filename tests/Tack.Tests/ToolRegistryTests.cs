@@ -99,4 +99,15 @@ public sealed class ToolRegistryTests
         Assert.Contains(r.OrphanedZones, z => z.Contains(@"C:\work") && z.Contains("node@18.19.0"));
         Assert.Single(c.Zones); // zones are warned about, not deleted
     }
+
+    [Fact]
+    public void A_none_zone_is_never_reported_as_orphaned()
+    {
+        var c = TwoNodes();
+        c.Zones.Add(new Zone { Path = @"C:\legacy", Tool = "node", Version = "none" });
+
+        var r = ToolRegistry.Remove(c, new[] { ("node", "18.19.0") });
+
+        Assert.Empty(r.OrphanedZones);
+    }
 }

@@ -25,32 +25,33 @@ app.Configure(cfg =>
         .WithDescription("Show the resolved version and source for a tool in this directory.");
     cfg.AddCommand<WhichCommand>("which")
         .WithDescription("Print the absolute path a tool resolves to (scriptable).");
-    cfg.AddBranch<CommandSettings>("tools", tools =>
+    // Command groups are singular (`tack tool add`); the plural is a silent alias for muscle memory.
+    cfg.AddBranch<CommandSettings>("tool", tool =>
     {
-        tools.SetDescription("Manage the central tool registry (add, remove, list).");
-        tools.AddCommand<ToolsAddCommand>("add")
+        tool.SetDescription("Manage the central tool registry (add, remove, list).");
+        tool.AddCommand<ToolsAddCommand>("add")
             .WithDescription("Register an existing tool install in the central registry.");
-        tools.AddCommand<ToolsRemoveCommand>("remove")
+        tool.AddCommand<ToolsRemoveCommand>("remove")
             .WithDescription("Remove tool versions (interactive picker when no version is given).");
-        tools.AddCommand<ToolsListCommand>("list")
+        tool.AddCommand<ToolsListCommand>("list")
             .WithDescription("List registered tools and versions.");
-    });
+    }).WithAlias("tools");
     cfg.AddCommand<DoctorCommand>("doctor")
         .WithDescription("Diagnose PATH and shim health (--fix to repair).");
     cfg.AddCommand<DisableCommand>("disable")
         .WithDescription("Turn tack off: park the shims dir so tools fall through to the real PATH.");
     cfg.AddCommand<EnableCommand>("enable")
         .WithDescription("Turn tack back on after 'tack disable'.");
-    cfg.AddBranch<CommandSettings>("zones", zones =>
+    cfg.AddBranch<CommandSettings>("zone", zone =>
     {
-        zones.SetDescription("Manage zones: directories (and everything under them) that use a tool version without a repo tack.yml.");
-        zones.AddCommand<ZonesAddCommand>("add")
+        zone.SetDescription("Manage zones: directories (and everything under them) that use a tool version without a repo tack.yml.");
+        zone.AddCommand<ZonesAddCommand>("add")
             .WithDescription("Add or update a zone: this directory and everything under it use tool@version.");
-        zones.AddCommand<ZonesRemoveCommand>("remove")
+        zone.AddCommand<ZonesRemoveCommand>("remove")
             .WithDescription("Remove zones (interactive picker when no directory is given).");
-        zones.AddCommand<ZonesListCommand>("list")
+        zone.AddCommand<ZonesListCommand>("list")
             .WithDescription("List zones.");
-    });
+    }).WithAlias("zones");
     cfg.AddCommand<UseCommand>("use")
         .WithDescription("Pin a tool version in this directory (writes tack.yml).");
     cfg.AddCommand<UpdateCommand>("update")

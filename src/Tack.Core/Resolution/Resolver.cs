@@ -11,6 +11,10 @@ public enum ResolutionSource
     TackYml,
     Zone,
     Default,
+    /// <summary>The winning zone is a <c>none</c> zone: tack is deliberately off for this tool here. The shim
+    /// always falls through to the next binary on PATH - even with <c>noResolution: error</c>, since the user
+    /// asked for exactly this.</summary>
+    ZoneNone,
     /// <summary>Nothing resolved; the shim should fall through to the next binary on PATH (or error).</summary>
     Passthrough,
     /// <summary>A rule picked a version that isn't registered on this machine.</summary>
@@ -51,6 +55,8 @@ public sealed class ResolverContext
 ///   4. deepest zone (non-enforced)
 ///   5. central default
 ///   6. passthrough                    (or error, per settings)
+/// A zone at step 2 or 4 whose version is <c>none</c> wins like any other zone, but resolves to
+/// <see cref="ResolutionSource.ZoneNone"/> (passthrough) instead of a version - so it also skips the default.
 /// The front-ends (shim, CLI) are thin over this; Core decides.
 /// </summary>
 public sealed class Resolver
@@ -78,8 +84,10 @@ public sealed class Resolver
         // 2. Enforced zone (beats tack.yml).
         var enforced = NearestZone(rt.Zones, cwd, enforce: true);
         if (enforced is not null)
-            return Select(exposedName, tool, rt, enforced.Version, ResolutionSource.EnforcedZone,
-                $"enforced zone {enforced.Path}");
+            return ZoneVersion.IsNone(enforced.Version)
+                ? Off(exposedName, tool, $"enforced zone {enforced.Path} sets {tool} to none")
+                : Select(exposedName, tool, rt, enforced.Version, ResolutionSource.EnforcedZone,
+                    $"enforced zone {enforced.Path}");
 
         // 3. Nearest tack.yml (walking up) that names this tool.
         foreach (var dir in WalkUp(cwd))
@@ -95,7 +103,9 @@ public sealed class Resolver
         // 4. Non-enforced zone.
         var zone = NearestZone(rt.Zones, cwd, enforce: false);
         if (zone is not null)
-            return Select(exposedName, tool, rt, zone.Version, ResolutionSource.Zone, $"zone {zone.Path}");
+            return ZoneVersion.IsNone(zone.Version)
+                ? Off(exposedName, tool, $"zone {zone.Path} sets {tool} to none")
+                : Select(exposedName, tool, rt, zone.Version, ResolutionSource.Zone, $"zone {zone.Path}");
 
         // 5. Central default.
         if (!string.IsNullOrWhiteSpace(rt.Default))
@@ -110,6 +120,14 @@ public sealed class Resolver
             Detail = "no rule resolved for this directory",
         };
     }
+
+    private static Resolution Off(string exposed, string tool, string detail) => new()
+    {
+        ExposedName = exposed,
+        Tool = tool,
+        Source = ResolutionSource.ZoneNone,
+        Detail = detail,
+    };
 
     private static Resolution Select(string exposed, string tool, ResolvedTool rt, string requested,
         ResolutionSource source, string detail)

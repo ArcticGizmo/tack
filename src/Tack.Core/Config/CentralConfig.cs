@@ -49,10 +49,24 @@ public sealed class Zone
 
     public string Tool { get; set; } = "";
 
+    /// <summary>A version (or prefix), or <see cref="ZoneVersion.None"/> to turn tack off for the tool here.</summary>
     public string Version { get; set; } = "";
 
     /// <summary>When true, this zone beats a repo tack.yml (org enforcement). Default false.</summary>
     public bool Enforce { get; set; }
+}
+
+/// <summary>
+/// The reserved zone version <c>none</c>: "tack doesn't resolve this tool here". It's still a zone - deepest
+/// wins, so it switches off an ancestor zone (and the central default) for its subtree, and a deeper zone can
+/// switch tack back on below it. Where it wins, the shim hands the command to the next one on PATH.
+/// </summary>
+public static class ZoneVersion
+{
+    public const string None = "none";
+
+    public static bool IsNone(string? version) =>
+        string.Equals(version?.Trim(), None, StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>The pre-zones binding shape: a directory glob mapped to several tools. Read only for migration.</summary>
