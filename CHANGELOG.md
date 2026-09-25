@@ -7,55 +7,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Added
-
-- `tack disable` / `tack enable` - a one-word off switch. Disable parks the shims dir as `shims_disabled` so the PATH entry resolves to nothing and every tool falls straight through to the real PATH; enable renames it back. No PATH edits, no admin, and even already-open shells stop hitting the shims immediately. Handy for A/B-ing "with tack vs without", and for dev testing.
-- Configuration keeps working while disabled: `tool add`, `zone add` and `reshim` write into the parked dir, so whatever you set up meanwhile goes live the moment you `tack enable`.
-- `tack doctor --fix` - stop reading the diagnosis and just fix it. Regenerates shims, then promotes the shims dir to the **front of the system (machine) PATH** so it beats system-wide installs a user-PATH entry can never outrank. Prompts for elevation via UAC when it needs it (and only for that one write). The rewrite goes through the registry directly and **preserves environment tokens** like `%SystemRoot%\system32` and `%NVM_HOME%` (keeping the value's `REG_EXPAND_SZ` type) instead of baking them into literal paths, and prints the full before/after plus writes a timestamped backup under the tack data dir so a bad edit can be reverted by hand. It only touches the system PATH - the user PATH is left alone.
-
-- A dev build (`run.bat`) can now be run like a real install, just politely behind it. `tack doctor --fix` under the dev profile puts the dev shims dir at the **front of the system PATH, directly behind the release tack's shims**. That way it beats every real install but never the release tack. The same UAC prompt, token preservation and backup apply, and like the release fix it never touches the user PATH. Run the release `tack disable` to hand shared commands like `node` over to dev, and `tack enable` to take them back. Debug builds now ship a shim next to `tack`, so the dev reshim actually has something to stamp out.
-- `tack tool` command group - `add`, `remove`, `list`. `tool remove` with no version drops you into an interactive, scrolling multi-select of the registered versions (give it a tool name to filter the picker to just that tool's versions; give a full `tool@version` to remove it outright). Removing a version tidies up after itself: it drops a tool left with nothing, repoints a default whose version just vanished, and warns about any zone left pointing at the removed version.
-- `tack zone` command group - `add`, `remove`, `list`. A zone is a directory, plus everything under it, that uses a tool version without a repo `tack.yml`. Unlike `bind`, zones can be taken back: `zone remove <dir> [tool]`, or with no arguments an interactive picker. Adding a zone that already exists for that directory and tool updates it, so two zones can never argue about the same place.
-- `none` zones - `tack zone add <dir> node@none` switches tack off for node in that directory and everything under it, so the command falls through to whatever is next on PATH. It's a zone like any other: it beats a zone above it and the central default, a deeper zone can switch tack back on, a `tack.yml` still wins unless the zone is `--enforce`d, and it passes through even with `noResolution: error` (you asked for it, after all).
-- `tack zone add <dir> none` - the same, for every tool at once, including ones you register later. A tool's own zone still wins, whether it's at that directory or deeper, so `tack zone add <dir> node@20` switches just node back on. Remove it with `tack zone remove <dir> none`.
-- `tack update` - updates tack in place from the latest GitHub release, then restamps your shims with the new build. `--check` just tells you whether there's anything to get.
-- `tack tool add` can now find the binDir for you: omit `--path` and it discovers the tool on PATH (the in-process equivalent of `where`), skips tack's own shims dir, and - when there's more than one hit - lets you pick which install to register. One hit is used automatically; none tells you to pass `--path`. PATH entries that use environment references (`%NVM_HOME%`, `%SystemRoot%\system32`) are expanded before probing, so an nvm-style install is found and registered by its real directory.
-
-### Changed
-
-- `tack doctor` now reports the disabled state plainly instead of crying FAIL about a shims dir that's off PATH on purpose.
-- Registry commands are now grouped under `tack tool`. **Breaking (pre-1.0):** `tack register` is now `tack tool add`, and `tack list` / `tack ls` are now `tack tool list`. The old top-level names are gone.
-- Shims are plumbing, and now they're treated like it. **Breaking (pre-1.0):** `tack shims` is gone - `tack doctor` already covered everything it said about PATH health (and more), and the one useful bit, which command names tack intercepts, is now a `commands` column in `tack tool list`. `tack reshim` still works but is hidden from `--help`; every command that changes config already reshims, and so does `tack doctor --fix`, so you only need it after hand-editing `config.json`.
-- Shims that don't resolve a command now fall through only to PATH entries *after* their own, which is what Windows would have picked next. Previously they searched from the top and skipped only themselves, so two tack instances on PATH would pass a command back and forth forever. Shims also find `resolved.json` in the data folder they were copied into, which ties each shim to its own profile. `tack tool add` discovery skips every tack instance's shims, and `tack doctor` reports being behind another tack as a hand-over hint instead of listing each shared command as shadowed.
-- Central bindings are now **zones**, and they take a plain directory instead of a glob. **Breaking (pre-1.0):** `tack bind` is gone; use `tack zone add <dir> tool@version [--enforce]`. A zone covers its directory and everything below it, and the deepest zone wins. Every zone that applies is one of the current directory's parents, and parents nest, so there's always exactly one winner. Before, `C:/work/*/api/**` and `C:/work/**` tied on "specificity", and whichever came first in `config.json` quietly won. Matching is also a plain walk up the tree instead of building a regex per binding on every shim call. Existing configs migrate on load: `X/**` and a bare `X` both become a zone at `X` (so a bare path now covers its children, which is what it looked like it did all along). A glob with a wildcard mid-path has no single-directory equivalent. It's left in `config.json`, ignored, and named by `tack doctor` and every reshim until you replace it.
-
-### Fixed
-
-- Changing config while a tool was running (or while antivirus was busy inspecting fresh shims) could fail with "the process cannot access the file" after the change was already saved. Reshims now leave unchanged shims alone, move an in-use file aside instead of fighting it, and swap in `resolved.json` without tripping over a shim that's reading it. Anything still stuck is a warning, not a crash.
-
-### Removed
-
-- The desktop UI. **Breaking (pre-1.0):** `tack-ui`, `tack open` / `tack ui` and the Start Menu shortcut are gone. The CLI does everything it did, in fewer megabytes. Installing, updating and uninstalling still wire PATH the same way.
-
 ---
 
-## [v0.1.0] - 2026-09-23
+## [v0.1.0] - 2026-09-25
 
-The first working tack: per-directory tool dispatch that reaches the processes shell hooks can't.
+The first tack: per-directory tool dispatch that reaches the processes shell hooks can't.
 
 - Per-directory tool dispatch via shims on PATH - a bare `node`/`python` resolves to the version the directory is supposed to use
-- Reaches processes you didn't launch from a shell (Visual Studio, Rider, background runners) - the whole reason tack exists
-- `tack.yml` project files, discovered by walking up from the current directory
-- Central directory bindings, so a repo can be pinned without committing a `tack.yml` to it
-- Resolution precedence you can actually explain: env override, `tack.yml`, central binding, default, then passthrough
+- Reaches processes you didn't launch from a shell (Visual Studio, Rider, background runners, scheduled tasks) - the whole reason tack exists
+- Sibling commands follow their tool: pin `node@20` and `npm`/`npx` there are node 20's too
+- `tack.yml` project files, discovered by walking up from the current directory and picked up the moment they exist - no reshim required
+- Zones: pin a directory, and everything under it, to a tool version without committing a thing to the repo. The deepest zone wins, and since zones are plain directories there's never a tie to argue about
+- `--enforce` zones beat a repo's `tack.yml`, for when the machine's rule has to win
+- `none` zones switch tack off for a tool (`node@none`) or for every tool (`none`) in a directory tree, so commands fall through to whatever is next on PATH
+- Resolution precedence you can actually explain: env override (`TACK_<TOOL>_VERSION`), enforced zone, `tack.yml`, zone, default, then passthrough
+- Versions match by dotted prefix, so `python: "3.12"` means the highest `3.12.x` you have (and never `3.121`)
 - Passthrough when nothing matches - tack stays invisible where it isn't configured
-- The `tack` CLI: `info`, `which`, `list`, `use`, `register`, `bind`, `reshim`, `doctor`, `shims`, `open`
+- `tack tool add` / `remove` / `list` - bring your own installs. `add` finds the tool on PATH for you (expanding `%NVM_HOME%`-style entries) and works out which commands it provides; `remove` is an interactive picker that tidies up defaults and flags any zone left pointing at nothing
+- `tack zone add` / `remove` / `list`, with an interactive picker for removal
+- `tack info` and `tack which` - what a directory resolves to, the exact binary that will run, and the rule that won
+- `tack use` writes the `tack.yml` for you
 - `tack doctor` names whatever is shadowing the shims dir on PATH (looking at you, nvm-windows)
-- A desktop UI (`tack open`): dashboard, directory inspector, registry and bindings editors, PATH doctor, shims panel
-- Nord (Dark) throughout the UI, because inspecting why a directory resolves the way it does should at least be pleasant
-- One-line PowerShell installer with fail-closed SHA-256 verification, and Velopack self-updates thereafter
+- `tack doctor --fix` moves the shims dir to the front of the system PATH via a single UAC prompt, keeps `%SystemRoot%`-style tokens as tokens, and leaves a before/after backup in case you'd like your old PATH back
+- `tack disable` / `tack enable` - an instant off switch with no PATH edits and no admin, for answering "is this tack's fault?"
+- `tack update` updates tack in place from the latest release and restamps your shims with the new build; `tack changelog` tells you what you just got
+- One-line PowerShell installer with fail-closed SHA-256 verification. No admin rights, anywhere, except the one you opt into
 - Install and update wire the shims dir onto PATH and regenerate shims automatically - no manual reshim on a fresh box
+- Reshims shrug off shims that are in use or being inspected by antivirus, instead of falling over mid-change
 - The shim carries honest Win32 metadata, so a copied `node.exe` identifies as tack rather than an anonymous unsigned binary
-- Isolated `(Dev)` data space for development builds, so hacking on tack never touches your real config, shims or PATH
+- Isolated `(Dev)` data space for development builds, which can sit on PATH politely behind a real install - so hacking on tack never touches your real config, shims or PATH
 
 ---
