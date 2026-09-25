@@ -27,6 +27,7 @@ public sealed class TackEnvironment
     public string ActiveShimsDir => ShimGate.ActiveDir(ShimsDir, DisabledShimsDir);
 
     public string ResolvedJson => TackPaths.ResolvedJson;
+    public string ShimLog => TackPaths.ShimLog;
     public string InstallDir => AppContext.BaseDirectory;
 
     public CentralConfig Load() => Store.Load();

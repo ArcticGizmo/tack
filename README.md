@@ -90,6 +90,20 @@ Removing a version tidies up after itself: a tool left with nothing is dropped, 
 - **`tack info node`**: the same for one tool, as a tree showing the winning rule and the exact binary that will run.
 - **`tack which node`**: just the absolute path, for scripts.
 - **`tack doctor`**: a PATH health checklist. Is the shims dir on PATH, and ahead of the installs it has to beat? Are any registered folders missing, or any old config needing attention?
+- **`tack log on`**: records every shim call to `%LocalAppData%\tack\logs\shim.log`. Each entry has the arguments, working directory, the version chosen and why, the binary that ran, and the **chain of processes that made the call**, parent first, with full paths. It's for tracking down the IDE, build step or rogue script invoking a tool from somewhere unexpected. `tack log off` stops it, and `tack log open` opens the folder with the log selected.
+
+  ```text
+  2026-09-25 14:03:12.481  node 20.11.0  (TackYml: C:\repo\tack.yml)  pid 18204
+    args    --version
+    cwd     C:\repo\src
+    runs    C:\node\20.11.0\node.exe
+    caller  [9920] C:\Windows\System32\cmd.exe
+            [4412] C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\devenv.exe
+            [2231] C:\Windows\explorer.exe
+            (parent [1096] has exited)
+  ```
+
+  Logging adds a little to every tool call, so switch it off when you're done. When it's off it costs nothing. The log rolls over to `shim.log.1` at 5 MB, so a log you forget about can't eat the disk.
 
 ### PATH repair
 

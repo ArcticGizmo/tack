@@ -9,6 +9,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.1.6] - 2026-09-25
+
+- `tack log on` records every shim call and who made it
+- Catches whatever keeps running `node` from somewhere unspeakable
+- `tack log off` stops it; `tack log open` finds the evidence
+
+---
+
 ## [v0.1.5] - 2026-09-25
 
 - `tool add` takes the install folder as a second argument (`--path` was always forgotten anyway)

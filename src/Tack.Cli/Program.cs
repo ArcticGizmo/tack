@@ -61,6 +61,16 @@ app.Configure(cfg =>
         zone.AddCommand<ZonesListCommand>("list")
             .WithDescription("List zones.");
     }).WithAlias("zones");
+    cfg.AddBranch<CommandSettings>("log", log =>
+    {
+        log.SetDescription("Log every shim call with the process chain that made it, to find what's invoking a tool (on, off, open).");
+        log.AddCommand<LogOnCommand>("on")
+            .WithDescription("Start logging shim calls.");
+        log.AddCommand<LogOffCommand>("off")
+            .WithDescription("Stop logging shim calls (the log is kept).");
+        log.AddCommand<LogOpenCommand>("open")
+            .WithDescription("Open the folder holding the log, with the log selected.");
+    });
     cfg.AddCommand<UseCommand>("use")
         .WithDescription("Pin a tool version in this directory (writes tack.yml).");
     cfg.AddCommand<UpdateCommand>("update")

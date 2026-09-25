@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Tack.Core.Config;
 
 /// <summary>
@@ -94,4 +96,9 @@ public sealed class TackSettings
 {
     /// <summary>What to do when nothing resolves: "passthrough" (default) or "error".</summary>
     public string NoResolution { get; set; } = "passthrough";
+
+    /// <summary>When true, every shim call appends who called it and what it ran to the invocation log
+    /// (<c>tack log on</c>; see <see cref="Tack.Core.Diagnostics.ShimLog"/>). Left out of the JSON when false.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Log { get; set; }
 }

@@ -143,6 +143,55 @@ public sealed class ShimTests : IClassFixture<ShimFixture>, IDisposable
         Assert.Contains("not registered", r.Stderr);
     }
 
+    [Fact]
+    public void Log_on_records_the_call_and_its_caller_chain()
+    {
+        string binDir = _fx.FakeNativeInstall("node");
+        var central = NodeConfig(("1.0.0", binDir), defaultVersion: "1.0.0");
+        central.Settings.Log = true;
+        string resolved = WriteResolved(central);
+        string node = _fx.ShimFor("node");
+
+        var r = Run(node, ["--stub-exit=0", "two words"], _work, resolved);
+        Assert.Equal(0, r.ExitCode);
+
+        string log = File.ReadAllText(Path.Combine(_work, "logs", "shim.log"));
+        Assert.Contains("node 1.0.0", log);
+        Assert.Contains("\"two words\"", log);
+        Assert.Contains($"cwd     {_work}", log);
+        Assert.Contains($"runs    {Path.Combine(binDir, "node.exe")}", log);
+        // The shim's parent is this test process, so the chain starts with us.
+        Assert.Contains($"caller  [{Environment.ProcessId}] {Environment.ProcessPath}", log);
+    }
+
+    [Fact]
+    public void Log_on_records_a_failure_too()
+    {
+        string binDir = CmdInstall("node", "@echo off\r\n");
+        var central = NodeConfig(("1.0.0", binDir), defaultVersion: "1.0.0");
+        central.Settings.Log = true;
+        string resolved = WriteResolved(central);
+        string node = _fx.ShimFor("node");
+
+        var env = new Dictionary<string, string> { ["TACK_NODE_VERSION"] = "99.0.0" };
+        Assert.NotEqual(0, Run(node, [], _work, resolved, env: env).ExitCode);
+
+        string log = File.ReadAllText(Path.Combine(_work, "logs", "shim.log"));
+        Assert.Contains("error   ", log);
+        Assert.DoesNotContain("runs    ", log);
+    }
+
+    [Fact]
+    public void Log_off_writes_nothing()
+    {
+        string binDir = _fx.FakeNativeInstall("node");
+        string resolved = WriteResolved(NodeConfig(("1.0.0", binDir), defaultVersion: "1.0.0"));
+        string node = _fx.ShimFor("node");
+
+        Assert.Equal(0, Run(node, [], _work, resolved).ExitCode);
+        Assert.False(Directory.Exists(Path.Combine(_work, "logs")));
+    }
+
     // ---- config helpers ----
 
     private static CentralConfig NodeConfig(params (string version, string binDir)[] versions)

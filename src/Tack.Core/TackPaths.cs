@@ -54,4 +54,7 @@ public static class TackPaths
 
     /// <summary>Compiled fast-lookup the shim reads (regenerated on config change).</summary>
     public static string ResolvedJson => Path.Combine(Root, "resolved.json");
+
+    /// <summary>The shim invocation log (<c>tack log on</c>), written beside resolved.json.</summary>
+    public static string ShimLog => Diagnostics.ShimLog.PathFor(ResolvedJson);
 }
