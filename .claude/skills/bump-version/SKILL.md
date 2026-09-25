@@ -7,9 +7,8 @@ description: Bump the tack version and refresh the changelog. Determines the nex
 
 Bumps tack to the next patch version and brings `CHANGELOG.md` up to date.
 
-`CHANGELOG.md` is embedded into both the CLI (`tack changelog`) and the UI (the What's New tab and the
-post-update popup) at build time, so editing this one file updates every surface. There is nothing else to
-regenerate - do not hand-edit anything under `src/`.
+`CHANGELOG.md` is embedded into the CLI (`tack changelog`) at build time, so editing this one file is all it
+takes. There is nothing else to regenerate - do not hand-edit anything under `src/`.
 
 ## Why the tag, not Directory.Build.props
 
@@ -120,6 +119,6 @@ Print, plainly:
   `CHANGELOG.md`) and reports. Tagging happens separately (see `publish.bat` / `release.yml`, which read the
   version from `Directory.Build.props`).
 - The changelog is embedded at build time, so nothing under `src/` needs touching - a rebuild picks up the
-  new content automatically for both `tack changelog` and the UI.
+  new content automatically for `tack changelog`.
 - Only the patch component is bumped. If the user wants a minor/major bump, they'll say so - follow their
   instruction instead of auto-incrementing patch.

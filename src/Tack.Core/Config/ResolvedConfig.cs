@@ -49,7 +49,7 @@ public sealed class ResolvedZone
 
 /// <summary>
 /// One source-gen context for both config shapes. AOT-safe: the shim reads <see cref="ResolvedConfig"/>
-/// without reflection; the CLI/UI read and write <see cref="CentralConfig"/> through the same generator.
+/// without reflection; the CLI reads and writes <see cref="CentralConfig"/> through the same generator.
 /// </summary>
 [JsonSourceGenerationOptions(
     PropertyNameCaseInsensitive = true,

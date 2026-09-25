@@ -7,7 +7,7 @@ namespace Tack.Core.Platform;
 /// Windows PATH installer: edits the USER PATH (HKCU\Environment, via the .NET User target) and broadcasts
 /// WM_SETTINGCHANGE so freshly launched processes pick it up without a logoff - no admin needed. Ported
 /// from perch's PathInstaller, adapted for tack: the shims dir is PREPENDED (it must win over other tool
-/// installs like nvm-windows), and the Velopack install dir is appended so tack.exe/tack-ui.exe resolve.
+/// installs like nvm-windows), and the Velopack install dir is appended so tack.exe resolves.
 ///
 /// Full PATH-ordering hardening vs other managers (and the `tack doctor` diagnosis) is M3; this M0 version
 /// just gets the two dirs on PATH idempotently.

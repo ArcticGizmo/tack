@@ -1,7 +1,7 @@
 namespace Tack.Core.Config;
 
 /// <summary>
-/// The central, tool-managed config (config.json). Authored by the `tack` CLI / UI, never hand-edited in
+/// The central, tool-managed config (config.json). Authored by the `tack` CLI, never hand-edited in
 /// the normal case. Compiled to <see cref="ResolvedConfig"/> (resolved.json) for the shim to read. See the
 /// scope plan section 3.3.
 /// </summary>

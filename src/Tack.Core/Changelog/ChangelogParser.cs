@@ -6,14 +6,13 @@ namespace Tack.Core.Changelog;
 /// One version block from <c>CHANGELOG.md</c>: the raw markdown lines under a <c>## </c> heading (heading
 /// included, trailing blank/rule lines trimmed) plus the version parsed out of that heading. Unversioned
 /// sections (e.g. <c>## [Unreleased]</c>) keep a null <see cref="Version"/> so they can be parsed but
-/// filtered out of any "what's new" range.
+/// skipped when picking the latest release.
 /// </summary>
 public sealed record ChangelogSection(string Heading, string Display, Version? Version, IReadOnlyList<string> Block);
 
 /// <summary>
-/// Splits <c>CHANGELOG.md</c> into per-version sections and picks out the ones newer than a given "last seen"
-/// version. Pure and UI-free so it can be unit-tested; each head embeds the file and hands the text in (the
-/// resource is per-assembly, so loading lives in the head, not here). Headings look like
+/// Splits <c>CHANGELOG.md</c> into per-version sections. Pure so it can be unit-tested; the CLI embeds the
+/// file and hands the text in (the resource is per-assembly, so loading lives in the head, not here). Headings look like
 /// <c>## [v0.2.11] - 2026-07-21</c>; the <c>v0.2.11</c> is the version. Ported from perch's ChangelogParser.
 /// </summary>
 public static class ChangelogParser
@@ -58,28 +57,6 @@ public static class ChangelogParser
         return sections;
     }
 
-    /// <summary>
-    /// The sections strictly newer than <paramref name="lastSeen"/> and no newer than
-    /// <paramref name="current"/>, in the file's own (newest-first) order. Returns nothing when
-    /// <paramref name="lastSeen"/> is null/blank/unparseable (a fresh install has no history to diff
-    /// against) or equals <paramref name="current"/>. Unversioned sections are never included.
-    /// </summary>
-    public static IReadOnlyList<ChangelogSection> UnseenSince(string markdown, string? lastSeen, string current)
-    {
-        if (!TryParse(lastSeen, out var low)) return [];
-        _ = TryParse(current, out var high); // high null -> no upper bound (defensive)
-
-        var result = new List<ChangelogSection>();
-        foreach (var s in Parse(markdown))
-        {
-            if (s.Version is null) continue;
-            if (s.Version <= low) continue;
-            if (high is not null && s.Version > high) continue;
-            result.Add(s);
-        }
-        return result;
-    }
-
     /// <summary>The most recent versioned section (skips <c>[Unreleased]</c>), or null if there is none.</summary>
     public static ChangelogSection? Latest(string markdown)
     {
@@ -98,17 +75,6 @@ public static class ChangelogParser
         if (!System.Version.TryParse(m.Groups[1].Value, out var v)) return false;
         version = v;
         display = "v" + m.Groups[1].Value;
-        return true;
-    }
-
-    private static bool TryParse(string? version, out Version? parsed)
-    {
-        parsed = null;
-        if (string.IsNullOrWhiteSpace(version)) return false;
-        var m = VersionRx.Match(version);
-        if (!m.Success) return false;
-        if (!System.Version.TryParse(m.Groups[1].Value, out var v)) return false;
-        parsed = v;
         return true;
     }
 }

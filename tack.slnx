@@ -3,7 +3,6 @@
     <Project Path="src/Tack.Core/Tack.Core.csproj" />
     <Project Path="src/Tack.Cli/Tack.Cli.csproj" />
     <Project Path="src/Tack.Shim/Tack.Shim.csproj" />
-    <Project Path="src/Tack.App/Tack.App.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Tack.StubTool/Tack.StubTool.csproj" />

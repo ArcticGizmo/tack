@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    The engine: config models, resolution, tool registry, shim planning, PATH doctor. No UI, no Spectre.
+    The engine: config models, resolution, tool registry, shim planning, PATH doctor. No Spectre.
     Platform-agnostic (net10.0); the one Windows-specific piece so far (PATH mutation) sits behind
     IPathInstaller with a [SupportedOSPlatform("windows")] implementation, so a mac/linux head can add its
     own later. (v1 is Windows-only, so the Windows impl lives here rather than in a separate platform

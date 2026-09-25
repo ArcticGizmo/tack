@@ -54,7 +54,4 @@ public static class TackPaths
 
     /// <summary>Compiled fast-lookup the shim reads (regenerated on config change).</summary>
     public static string ResolvedJson => Path.Combine(Root, "resolved.json");
-
-    /// <summary>Small UI preferences (e.g. the changelog "last seen" bookkeeping); never read by the shim.</summary>
-    public static string UiStateJson => Path.Combine(Root, "ui-state.json");
 }

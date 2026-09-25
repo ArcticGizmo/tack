@@ -6,7 +6,7 @@ namespace Tack.Core.Config;
 /// Compiles the human/tool-authored <see cref="CentralConfig"/> (config.json) into the flat, shim-facing
 /// <see cref="ResolvedConfig"/> (resolved.json): builds the exposed-name -> owning-tool index, splits the
 /// zones list per tool with a precomputed match key, and carries defaults + settings across.
-/// Run by the CLI/UI whenever central config changes; the shim only ever reads the output.
+/// Run by the CLI whenever central config changes; the shim only ever reads the output.
 /// </summary>
 public static class ConfigCompiler
 {

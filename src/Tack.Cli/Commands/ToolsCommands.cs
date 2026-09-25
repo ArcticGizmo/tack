@@ -211,7 +211,7 @@ public sealed class ToolsRemoveCommand : Command<ToolsRemoveSettings>
         foreach (var r in result.DefaultsRepointed)
             AnsiConsole.MarkupLine($"[grey]default repointed:[/] {Markup.Escape(r)}");
         foreach (var z in result.OrphanedZones)
-            AnsiConsole.MarkupLine($"[yellow]zone now points at a removed version:[/] {Markup.Escape(z)} [grey](edit with tack zones / the UI)[/]");
+            AnsiConsole.MarkupLine($"[yellow]zone now points at a removed version:[/] {Markup.Escape(z)} [grey](edit with tack zones)[/]");
 
         Mutations.ReportReshim(env.Reshim(config));
         return 0;

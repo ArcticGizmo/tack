@@ -4,6 +4,10 @@
 > building, the architecture, and a milestone plan. It borrows its distribution and project-layout
 > patterns wholesale from the sibling `perch` project (`../perch`) — Avalonia + .NET 10, Velopack, a
 > single-line PowerShell installer, and a tiny NativeAOT helper binary.
+>
+> **Update (2026-09-25): the Avalonia desktop UI (`tack-ui`, `Tack.App`) has been dropped.** tack is
+> CLI-only; `tack.exe` is now the Velopack mainExe and hosts the install hooks. References to the UI
+> below (and in the milestone status docs) are historical.
 
 ---
 

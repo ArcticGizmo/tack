@@ -18,7 +18,7 @@ public enum ResolutionSource
 }
 
 /// <summary>The outcome of resolving one exposed binary in one directory, with the winning source recorded
-/// so `tack info` / the UI can always explain "why this version".</summary>
+/// so `tack info` can always explain "why this version".</summary>
 public sealed class Resolution
 {
     public required string ExposedName { get; init; }
@@ -51,7 +51,7 @@ public sealed class ResolverContext
 ///   4. deepest zone (non-enforced)
 ///   5. central default
 ///   6. passthrough                    (or error, per settings)
-/// The front-ends (shim, CLI, UI) are thin over this; Core decides.
+/// The front-ends (shim, CLI) are thin over this; Core decides.
 /// </summary>
 public sealed class Resolver
 {

@@ -1,6 +1,6 @@
 <Project>
   <!--
-    Dev-only: put a tack-shim next to the CLI/UI build output, so a `run.bat` / `run-ui.bat` (Debug) instance can
+    Dev-only: put a tack-shim next to the CLI build output, so a `run.bat` (Debug) instance can
     reshim just like an installed one. Release packaging is untouched - publish.bat publishes the NativeAOT shim
     into the same dir itself. The Debug shim is framework-dependent (tack-shim.exe + .dll + json + Tack.Core.dll);
     ShimPayload already picks those support files up and Reshimmer copies them into the shims dir once.

@@ -15,19 +15,7 @@ if "%VERSION%"=="" (
 
 echo Building tack v%VERSION%...
 
-:: The Avalonia UI head (tack-ui.exe) - the Velopack mainExe / Start-Menu shortcut target.
-dotnet publish src\Tack.App\Tack.App.csproj -c Release -f net10.0-windows -r win-x64 --self-contained true ^
-    -p:PublishSingleFile=true ^
-    -p:EnableCompressionInSingleFile=true ^
-    -p:DebugType=embedded ^
-    -o publish\
-
-if %ERRORLEVEL% neq 0 (
-    echo Build failed - tack-ui.
-    exit /b %ERRORLEVEL%
-)
-
-:: The console CLI (tack.exe) - published into the SAME dir so Velopack packs all heads together.
+:: The console CLI (tack.exe) - the Velopack mainExe, which hosts the install/update/uninstall hooks.
 dotnet publish src\Tack.Cli\Tack.Cli.csproj -c Release -r win-x64 --self-contained true ^
     -p:PublishSingleFile=true ^
     -p:EnableCompressionInSingleFile=true ^
@@ -41,7 +29,8 @@ if %ERRORLEVEL% neq 0 (
 
 echo Publishing tack-shim (NativeAOT) ...
 
-:: tack-shim is the per-tool proxy, copied under each tool name at reshim time. It runs on every tool call,
+:: tack-shim is the per-tool proxy, copied under each tool name at reshim time. Published into the SAME dir
+:: as tack.exe so Velopack packs both together. It runs on every tool call,
 :: so NativeAOT gives the best cold start - but AOT needs the Visual Studio "Desktop development with C++"
 :: workload for the native linker. When that's missing (common on a fresh dev box) the AOT publish can't
 :: link, so fall back to a self-contained single-file build below so LOCAL packaging still works. CI
@@ -64,7 +53,8 @@ if %ERRORLEVEL% neq 0 (
 
 echo Packaging ...
 
-vpk pack --packId Tack --packTitle "Tack" --packVersion %VERSION% --packDir publish\ --mainExe tack-ui.exe --outputDir releases\
+:: --shortcuts None - tack is a console CLI, so no Desktop / Start Menu shortcuts.
+vpk pack --packId Tack --packTitle "Tack" --packVersion %VERSION% --packDir publish\ --mainExe tack.exe --shortcuts None --outputDir releases\
 
 if %ERRORLEVEL% neq 0 (
     echo Pack failed. Is the vpk CLI installed? Run: dotnet tool install -g vpk

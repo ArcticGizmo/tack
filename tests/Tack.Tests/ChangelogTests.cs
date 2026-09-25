@@ -58,25 +58,6 @@ public class ChangelogTests
     }
 
     [Fact]
-    public void UnseenSince_returns_only_versions_between_lastSeen_exclusive_and_current_inclusive()
-    {
-        var unseen = ChangelogParser.UnseenSince(Sample, "v0.1.0", "v0.3.0");
-
-        Assert.Equal(2, unseen.Count);
-        Assert.Equal(new Version(0, 3, 0), unseen[0].Version); // newest first
-        Assert.Equal(new Version(0, 2, 0), unseen[1].Version);
-        Assert.DoesNotContain(unseen, s => s.Version is null); // never [Unreleased]
-    }
-
-    [Fact]
-    public void UnseenSince_is_empty_for_a_fresh_install_or_same_version()
-    {
-        Assert.Empty(ChangelogParser.UnseenSince(Sample, null, "v0.3.0"));   // fresh install
-        Assert.Empty(ChangelogParser.UnseenSince(Sample, "", "v0.3.0"));     // blank last-seen
-        Assert.Empty(ChangelogParser.UnseenSince(Sample, "v0.3.0", "v0.3.0")); // no update
-    }
-
-    [Fact]
     public void Latest_skips_unreleased_and_returns_the_newest_released_section()
     {
         var latest = ChangelogParser.Latest(Sample);
@@ -91,27 +72,5 @@ public class ChangelogTests
         Assert.Equal("bold and italic", ChangelogMarkup.StripInline("**bold** and *italic*"));
         Assert.Equal("run tack reshim", ChangelogMarkup.StripInline("run `tack reshim`"));
         Assert.Equal("see the docs", ChangelogMarkup.StripInline("see [the docs](https://example.com)"));
-    }
-
-    [Fact]
-    public void UiState_round_trips_through_its_store()
-    {
-        string path = Path.Combine(Path.GetTempPath(), $"tack-uistate-{Guid.NewGuid():N}.json");
-        try
-        {
-            var store = new UiStateStore(path);
-            Assert.True(store.Load().ShowChangelogOnUpdate);      // default when absent
-            Assert.Null(store.Load().LastSeenVersion);
-
-            store.Save(new UiState { LastSeenVersion = "0.1.0", ShowChangelogOnUpdate = false });
-
-            var loaded = store.Load();
-            Assert.Equal("0.1.0", loaded.LastSeenVersion);
-            Assert.False(loaded.ShowChangelogOnUpdate);
-        }
-        finally
-        {
-            if (File.Exists(path)) File.Delete(path);
-        }
     }
 }
