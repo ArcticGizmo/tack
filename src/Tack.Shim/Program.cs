@@ -13,7 +13,7 @@ using Tack.Core.Resolution;
 // forwards args + std streams, ignores Ctrl-C itself (lets the child own the interrupt), waits, and exits
 // with the child's exit code.
 //
-// All resolution logic lives in Tack.Core (the resolver, glob, version match, mini tack.yml parser). The
+// All resolution logic lives in Tack.Core (the resolver, zone paths, version match, mini tack.yml parser). The
 // shim is a thin front-end: filename -> Resolver -> locate -> exec. It reads only the compiled resolved.json.
 
 try
@@ -31,7 +31,8 @@ try
     ResolvedConfig? config;
     try
     {
-        using var fs = File.OpenRead(resolvedPath);
+        // Share write + delete so a reshim swapping in a new resolved.json is never blocked by a shim mid-read.
+        using var fs = new FileStream(resolvedPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         config = JsonSerializer.Deserialize(fs, TackJson.Default.ResolvedConfig);
     }
     catch (Exception ex)
@@ -59,6 +60,11 @@ try
         case ResolutionSource.VersionNotInstalled:
             return Fail(res.Detail ?? "resolved version is not installed");
 
+        // A none zone: tack is switched off for this tool here, on purpose - so always pass through, whatever
+        // noResolution says.
+        case ResolutionSource.ZoneNone:
+            return Passthrough(exposed, args);
+
         // Nothing resolved, or a stale shim for an unregistered name. Default behaviour is to stay invisible:
         // pass through to the next matching binary on PATH. `error` mode fails instead.
         case ResolutionSource.Passthrough:
@@ -82,16 +88,13 @@ catch (Exception ex)
 
 // ---- passthrough -------------------------------------------------------------------------------
 
-// tack stays invisible where it isn't configured: exec the next matching binary on PATH, skipping our own
-// shims dir so we don't recurse into ourselves.
+// tack stays invisible where it isn't configured: exec the next matching binary on PATH AFTER our own entry
+// (PassthroughScan) - never ourselves, and never a shims dir ahead of us, so a dev tack behind a release tack
+// can't ping-pong with it.
 static int Passthrough(string exposed, string[] forwarded)
 {
-    string shimsDir = Norm(AppContext.BaseDirectory);
-    string pathVar = Environment.GetEnvironmentVariable("PATH") ?? "";
-
-    foreach (var entry in pathVar.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    foreach (var entry in PassthroughScan.Candidates(Environment.GetEnvironmentVariable("PATH"), AppContext.BaseDirectory))
     {
-        if (Norm(entry) == shimsDir) continue; // skip ourselves
         string? found = BinaryLocator.Locate(entry, exposed, File.Exists);
         if (found is not null)
         {
@@ -100,12 +103,6 @@ static int Passthrough(string exposed, string[] forwarded)
         }
     }
     return Fail($"'{exposed}' did not resolve for this directory and no fallback was found on PATH");
-}
-
-static string Norm(string p)
-{
-    try { return Path.GetFullPath(p).TrimEnd('\\', '/').ToLowerInvariant(); }
-    catch { return p.TrimEnd('\\', '/').ToLowerInvariant(); }
 }
 
 // ---- exec proxy ---------------------------------------------------------------------------------
@@ -145,6 +142,15 @@ static string? FindResolved()
 
     string beside = Path.Combine(AppContext.BaseDirectory, "resolved.json");
     if (File.Exists(beside)) return beside;
+
+    // The data dir the shim was stamped into: <root>\shims\node.exe -> <root>\resolved.json. This ties a shim to
+    // ITS profile (tack vs tack (Dev)) by where it lives, not by how it was compiled - so a dev instance's shims
+    // read the dev config even when the shim binary itself is a Release build.
+    if (Directory.GetParent(AppContext.BaseDirectory.TrimEnd('\\', '/')) is { } root)
+    {
+        string owner = Path.Combine(root.FullName, "resolved.json");
+        if (File.Exists(owner)) return owner;
+    }
 
     return File.Exists(TackPaths.ResolvedJson) ? TackPaths.ResolvedJson : null;
 }

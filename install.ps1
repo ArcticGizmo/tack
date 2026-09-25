@@ -5,7 +5,7 @@
 .DESCRIPTION
     Downloads the Velopack installer (Tack-win-Setup.exe) for a GitHub release, verifies it against the
     SHA256SUMS.txt published alongside it, and runs it. Everything after this - every subsequent update -
-    is Velopack's job (checked from the tack UI).
+    is Velopack's job, via `tack update`.
 
     Designed to be run as a one-liner:
 
@@ -111,7 +111,7 @@ The download has been deleted. Retry; if it keeps failing, report it at $(Get-Re
 
         # --- Install -----------------------------------------------------------------------------------
         # Velopack's installer needs no admin rights: it installs to %LocalAppData%\Tack, registers the
-        # uninstaller and Start Menu shortcut, and may launch the app before exiting.
+        # uninstaller, and may launch the app before exiting.
         #
         # So do NOT use `Start-Process -Wait`: that waits for the started process *and all its descendants*,
         # which can include an app the installer launches, so the one-liner could hang. Waiting on the Setup
@@ -140,7 +140,7 @@ The download has been deleted. Retry; if it keeps failing, report it at $(Get-Re
     Write-Host ''
     Write-Host "tack $tag is installed." -ForegroundColor Green
     Write-Host '  Open a NEW terminal (so it picks up the updated PATH) and run:  tack --version' -ForegroundColor DarkGray
-    Write-Host '  Launch the UI from the Start Menu, or with:  tack open' -ForegroundColor DarkGray
+    Write-Host '  Update later with:  tack update' -ForegroundColor DarkGray
 }
 
 function Get-RepoUrl { param([string] $Repo) "https://github.com/$Repo" }

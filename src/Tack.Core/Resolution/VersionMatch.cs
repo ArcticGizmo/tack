@@ -1,7 +1,7 @@
 namespace Tack.Core.Resolution;
 
 /// <summary>
-/// Matches a requested version (from tack.yml / a binding / a default) against the registered versions.
+/// Matches a requested version (from tack.yml / a zone / a default) against the registered versions.
 /// Exact match wins; otherwise a dotted-prefix match (e.g. "3.12" matches "3.12.1" but not "3.121.0"),
 /// choosing the highest. Keeps tack.yml terse ("python: 3.12") without pinning a patch.
 /// </summary>

@@ -109,6 +109,27 @@ public sealed class ShimTests : IClassFixture<ShimFixture>, IDisposable
     }
 
     [Fact]
+    public void None_zone_passes_through_to_path_even_in_error_mode()
+    {
+        // A default would pick the registered node, but a none zone over _work switches tack off there - and
+        // noResolution=error must not turn that deliberate opt-out into a failure.
+        string binDir = CmdInstall("node", "@echo off\r\necho WHICH=registered\r\n");
+        var central = NodeConfig(("1.0.0", binDir), defaultVersion: "1.0.0");
+        central.Zones.Add(new Zone { Path = _work, Tool = "node", Version = "none" });
+        central.Settings.NoResolution = "error";
+        string resolved = WriteResolved(central);
+        string node = _fx.ShimFor("node");
+
+        string pathDir = Directory.CreateDirectory(Path.Combine(_work, "onpath")).FullName;
+        File.WriteAllText(Path.Combine(pathDir, "node.cmd"), "@echo off\r\necho WHICH=passthrough\r\n");
+        var env = new Dictionary<string, string> { ["PATH"] = pathDir };
+
+        var r = Run(node, [], _work, resolved, env: env);
+        Assert.Equal(0, r.ExitCode);
+        Assert.Contains("WHICH=passthrough", r.Stdout);
+    }
+
+    [Fact]
     public void Version_not_installed_fails_loudly()
     {
         string binDir = CmdInstall("node", "@echo off\r\n");

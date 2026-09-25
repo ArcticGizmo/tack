@@ -7,7 +7,7 @@ namespace Tack.Core.Platform;
 /// Windows PATH installer: edits the USER PATH (HKCU\Environment, via the .NET User target) and broadcasts
 /// WM_SETTINGCHANGE so freshly launched processes pick it up without a logoff - no admin needed. Ported
 /// from perch's PathInstaller, adapted for tack: the shims dir is PREPENDED (it must win over other tool
-/// installs like nvm-windows), and the Velopack install dir is appended so tack.exe/tack-ui.exe resolve.
+/// installs like nvm-windows), and the Velopack install dir is appended so tack.exe resolves.
 ///
 /// Full PATH-ordering hardening vs other managers (and the `tack doctor` diagnosis) is M3; this M0 version
 /// just gets the two dirs on PATH idempotently.
@@ -57,6 +57,26 @@ public sealed class WindowsPathInstaller : IPathInstaller
         var kept = Split(current).Where(p => !PathEquals(p, _shimsDir) && !PathEquals(p, _installDir)).ToList();
         Environment.SetEnvironmentVariable("PATH", string.Join(';', kept), EnvironmentVariableTarget.User);
         Broadcast();
+    }
+
+    /// <summary>
+    /// Move the shims dir to the front of the MACHINE PATH so it beats system-wide tool installs a user-PATH
+    /// entry can't - the core of <c>tack doctor --fix</c>. With <paramref name="behind"/> (a dev instance: the
+    /// release shims dirs) it lands directly after the first of those on PATH instead of at index 0, so dev beats
+    /// every real install but never the release tack. Reads and writes the raw registry value so %VAR% tokens
+    /// survive, and returns the before/after (null when the order was already right and nothing was written).
+    /// Writing HKLM needs admin: unelevated it throws (ERROR_ACCESS_DENIED), which the caller turns into a UAC
+    /// relaunch.
+    /// </summary>
+    public PathChange? PromoteShimsOnMachinePath(IEnumerable<string>? behind = null)
+    {
+        string before = WindowsEnvRegistry.ReadRaw(machine: true);
+        string? after = PathEdits.PromoteFront(before, _shimsDir, behind);
+        if (after is null) return null;
+
+        WindowsEnvRegistry.WriteExpand(machine: true, after);
+        Broadcast();
+        return new PathChange("machine", before, after);
     }
 
     private static List<string> Split(string pathVar) =>

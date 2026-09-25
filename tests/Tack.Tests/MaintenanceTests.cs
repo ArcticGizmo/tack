@@ -25,15 +25,40 @@ public sealed class ConfigStoreTests : IDisposable
         {
             Tools = { ["node"] = new RegisteredTool { Versions = { ["20.11.0"] = new InstalledVersion { BinDir = @"C:\n20", Exposes = { "node", "npm" } } } } },
             Defaults = { ["node"] = "20.11.0" },
-            Bindings = { new Binding { Glob = "C:/work/**", Tools = { ["node"] = "20.11.0" } } },
+            Zones = { new Zone { Path = @"C:\work", Tool = "node", Version = "20.11.0", Enforce = true } },
         };
         store.Save(c);
 
         var loaded = store.Load();
         Assert.Equal(@"C:\n20", loaded.Tools["node"].Versions["20.11.0"].BinDir);
         Assert.Equal("20.11.0", loaded.Defaults["node"]);
-        Assert.Single(loaded.Bindings);
+        var z = Assert.Single(loaded.Zones);
+        Assert.Equal(@"C:\work", z.Path);
+        Assert.True(z.Enforce);
         Assert.Contains("npm", loaded.Tools["node"].Versions["20.11.0"].Exposes);
+        Assert.DoesNotContain("bindings", File.ReadAllText(store.Path)); // a clean config never writes the legacy key
+    }
+
+    [Fact]
+    public void Loading_a_pre_zones_config_migrates_its_bindings()
+    {
+        string path = Path.Combine(_dir, "config.json");
+        File.WriteAllText(path, """
+            {
+              "bindings": [
+                { "glob": "C:/work/**", "tools": { "node": "18" } },
+                { "glob": "C:/work/*/api/**", "tools": { "node": "20" } }
+              ]
+            }
+            """);
+        var store = new ConfigStore(path);
+
+        var loaded = store.Load();
+        Assert.Equal("C:/work", Assert.Single(loaded.Zones).Path);
+        Assert.Equal(new[] { "C:/work/*/api/**" }, ZoneRegistry.Unmigrated(loaded));
+
+        store.Save(loaded); // the unmigratable binding survives a save so doctor can keep naming it
+        Assert.Single(store.Load().Bindings!);
     }
 }
 
@@ -102,6 +127,99 @@ public sealed class ReshimmerTests : IDisposable
         Assert.False(File.Exists(Path.Combine(shims, "npm.exe"))); // pruned
         Assert.True(File.Exists(Path.Combine(shims, "node.exe")));
         Assert.Equal(1, result.ShimsPruned);
+    }
+
+    private CentralConfig NodeExposing(params string[] names)
+    {
+        var v = new InstalledVersion { BinDir = _root };
+        v.Exposes.AddRange(names);
+        return new CentralConfig { Tools = { ["node"] = new RegisteredTool { Versions = { ["1"] = v } } } };
+    }
+
+    [Fact]
+    public void Leaves_identical_shims_untouched()
+    {
+        string shims = Path.Combine(_root, "shims");
+        string resolved = Path.Combine(_root, "resolved.json");
+        var payload = Payload();
+        Reshimmer.Run(NodeExposing("node", "npm"), shims, resolved, payload);
+
+        var again = Reshimmer.Run(NodeExposing("node", "npm", "npx"), shims, resolved, payload);
+
+        Assert.Equal(1, again.ShimsWritten);   // only the new npx
+        Assert.Equal(2, again.ShimsUnchanged);
+    }
+
+    [Fact]
+    public void A_new_shim_build_replaces_the_old_copies()
+    {
+        string shims = Path.Combine(_root, "shims");
+        string resolved = Path.Combine(_root, "resolved.json");
+        var payload = Payload();
+        Reshimmer.Run(NodeExposing("node"), shims, resolved, payload);
+
+        File.WriteAllText(payload.ShimExe, "SHIM v2"); // an update / rebuild
+        var again = Reshimmer.Run(NodeExposing("node"), shims, resolved, payload);
+
+        Assert.Equal(1, again.ShimsWritten);
+        Assert.Equal("SHIM v2", File.ReadAllText(Path.Combine(shims, "node.exe")));
+    }
+
+    [Fact]
+    public void A_locked_shim_is_moved_aside_and_replaced_instead_of_failing()
+    {
+        string shims = Path.Combine(_root, "shims");
+        string resolved = Path.Combine(_root, "resolved.json");
+        var payload = Payload();
+        Reshimmer.Run(NodeExposing("node"), shims, resolved, payload);
+        File.WriteAllText(payload.ShimExe, "SHIM v2");
+
+        string node = Path.Combine(shims, "node.exe");
+        ReshimResult again;
+        // Held open the way a running image is: no write sharing, but renamable.
+        using (new FileStream(node, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
+            again = Reshimmer.Run(NodeExposing("node"), shims, resolved, payload);
+
+        Assert.Empty(again.Locked);
+        Assert.Equal("SHIM v2", File.ReadAllText(node));
+        Assert.Single(Directory.GetFiles(shims, "*.tack-old")); // the old copy, parked
+
+        Reshimmer.Run(NodeExposing("node"), shims, resolved, payload); // nothing holds it now
+        Assert.Empty(Directory.GetFiles(shims, "*.tack-old"));
+    }
+
+    [Fact]
+    public void A_file_that_cannot_even_be_moved_is_reported_not_thrown()
+    {
+        string shims = Path.Combine(_root, "shims");
+        string resolved = Path.Combine(_root, "resolved.json");
+        var payload = Payload();
+        Reshimmer.Run(NodeExposing("node"), shims, resolved, payload);
+        File.WriteAllText(payload.ShimExe, "SHIM v2");
+
+        string node = Path.Combine(shims, "node.exe");
+        ReshimResult again;
+        using (new FileStream(node, FileMode.Open, FileAccess.Read, FileShare.Read)) // no delete sharing: can't rename
+            again = Reshimmer.Run(NodeExposing("node"), shims, resolved, payload);
+
+        Assert.Equal(node, Assert.Single(again.Locked));
+        Assert.True(File.Exists(resolved)); // the rest of the reshim still happened
+    }
+
+    [Fact]
+    public void Resolved_json_can_be_rewritten_while_a_shim_is_reading_it()
+    {
+        string shims = Path.Combine(_root, "shims");
+        string resolved = Path.Combine(_root, "resolved.json");
+        var payload = Payload();
+        Reshimmer.Run(NodeExposing("node"), shims, resolved, payload);
+
+        // Opened exactly as the shim opens it.
+        using (new FileStream(resolved, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            Reshimmer.Run(NodeExposing("node", "npm"), shims, resolved, payload);
+
+        Assert.Contains("npm", File.ReadAllText(resolved));
+        Assert.Empty(Directory.GetFiles(_root, "resolved.json.*.tmp"));
     }
 
     [Fact]
@@ -204,6 +322,20 @@ public sealed class PathDoctorTests : IDisposable
             t => t == EnvironmentVariableTarget.Machine ? other : shims);
 
         Assert.Contains(report.Checks, c => c.Title == "'node' is shadowed" && c.Status == CheckStatus.Warn);
+    }
+
+    [Fact]
+    public void Says_which_path_holds_the_shims_dir()
+    {
+        string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
+
+        var onSystem = PathDoctor.Run(NodeAt(_root), shims,
+            t => t == EnvironmentVariableTarget.Machine ? $@"C:\first;{shims}" : "");
+        Assert.Contains(onSystem.Checks, c => c.Title == "Shims directory is on PATH" && c.Detail == "system PATH, entry 2");
+
+        var userOnly = PathDoctor.Run(NodeAt(_root), shims,
+            t => t == EnvironmentVariableTarget.User ? shims : "");
+        Assert.Contains(userOnly.Checks, c => c.Title == "Shims directory is on PATH" && c.Detail.StartsWith("user PATH only"));
     }
 
     [Fact]

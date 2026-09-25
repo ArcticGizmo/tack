@@ -22,8 +22,7 @@ public sealed class ChangelogSettings : CommandSettings
 /// <summary>
 /// Prints tack's changelog from the embedded <c>CHANGELOG.md</c>. Latest release by default; <c>--all</c> for
 /// the full history, or <c>--number N</c> for the most recent N. Rendered with Spectre so it reads like the
-/// rest of the CLI. The UI shows the same content (embedded copy + <see cref="ChangelogParser"/>), so the two
-/// front-ends stay in step.
+/// rest of the CLI.
 /// </summary>
 public sealed class ChangelogCommand : Command<ChangelogSettings>
 {

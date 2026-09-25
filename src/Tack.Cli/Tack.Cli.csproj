@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The `tack` command (assembly/exe name `tack`). Console app. The rich Spectre.Console CLI is M3; M0
-       ships just the version command and `tack open` (launch the UI). -->
+  <!-- The `tack` command (assembly/exe name `tack`). Console app, and tack's only front-end: a rich
+       Spectre.Console CLI over Tack.Core. It is also the Velopack mainExe, so it hosts the install lifecycle
+       callbacks that wire tack onto the user PATH. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
@@ -24,8 +25,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- `tack update` reads the feed URL from this, keeping Directory.Build.props the single source of truth. -->
+    <AssemblyMetadata Include="RepositoryUrl" Value="$(RepositoryUrl)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- The changelog is embedded so `tack changelog` can render it with no file dependency at runtime
          (read via the assembly manifest under the logical name "Tack.CHANGELOG.md"). -->
     <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="Tack.CHANGELOG.md" />
   </ItemGroup>
+
+  <Import Project="..\DevShim.targets" />
 </Project>

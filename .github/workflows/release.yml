@@ -30,15 +30,7 @@ jobs:
         id: version
         run: echo "VERSION=$($env:GITHUB_REF_NAME -replace '^v','')" >> $env:GITHUB_OUTPUT
 
-      - name: Publish tack-ui (Avalonia head)
-        run: |
-          dotnet publish src/Tack.App/Tack.App.csproj -c Release -f net10.0-windows -r win-x64 --self-contained true `
-            -p:PublishSingleFile=true `
-            -p:EnableCompressionInSingleFile=true `
-            -p:DebugType=embedded `
-            -p:Version=${{ steps.version.outputs.VERSION }} `
-            -o publish/
-
+      # tack.exe is the Velopack mainExe: it hosts the install/update/uninstall hooks that wire PATH.
       - name: Publish tack (CLI)
         run: |
           dotnet publish src/Tack.Cli/Tack.Cli.csproj -c Release -r win-x64 --self-contained true `
@@ -48,7 +40,7 @@ jobs:
             -p:Version=${{ steps.version.outputs.VERSION }} `
             -o publish/
 
-      # tack-shim into the SAME dir so Velopack packs all heads together. windows-latest ships the C++ build
+      # tack-shim into the SAME dir so Velopack packs both together. windows-latest ships the C++ build
       # tools, so this links as NativeAOT (the real, fast shim).
       - name: Publish tack-shim (NativeAOT)
         run: dotnet publish src/Tack.Shim/Tack.Shim.csproj -c Release -r win-x64 -p:Version=${{ steps.version.outputs.VERSION }} -o publish/
@@ -64,8 +56,9 @@ jobs:
           Get-Content bench.txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
+      # --shortcuts None - tack is a console CLI, so no Desktop / Start Menu shortcuts.
       - name: Pack with Velopack
-        run: vpk pack --packId Tack --packTitle "Tack" --packVersion ${{ steps.version.outputs.VERSION }} --packDir publish/ --mainExe tack-ui.exe --outputDir releases/
+        run: vpk pack --packId Tack --packTitle "Tack" --packVersion ${{ steps.version.outputs.VERSION }} --packDir publish/ --mainExe tack.exe --shortcuts None --outputDir releases/
 
       # Everything in releases/: Tack-win-Setup.exe (what install.ps1 downloads and verifies), the Velopack
       # update feed the in-app updater reads (nupkg + RELEASES + releases.win.json), and the portable .zip.

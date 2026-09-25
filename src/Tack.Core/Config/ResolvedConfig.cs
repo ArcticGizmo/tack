@@ -4,7 +4,7 @@ namespace Tack.Core.Config;
 
 /// <summary>
 /// The compiled, shim-facing config (resolved.json). A flat, fast-lookup form of <see cref="CentralConfig"/>:
-/// bindings are split per tool and given a precomputed specificity, and every exposed binary name is mapped
+/// zones are split per tool with a precomputed match key, and every exposed binary name is mapped
 /// to its owning tool. The shim reads this with the System.Text.Json source generator (AOT-safe).
 /// </summary>
 public sealed class ResolvedConfig
@@ -24,8 +24,8 @@ public sealed class ResolvedTool
 
     public Dictionary<string, ResolvedVersion> Versions { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>This tool's central bindings (flattened from the shared bindings list).</summary>
-    public List<ResolvedBinding> Bindings { get; set; } = new();
+    /// <summary>This tool's central zones.</summary>
+    public List<ResolvedZone> Zones { get; set; } = new();
 }
 
 public sealed class ResolvedVersion
@@ -34,19 +34,27 @@ public sealed class ResolvedVersion
     public List<string> Exposes { get; set; } = new();
 }
 
-public sealed class ResolvedBinding
+public sealed class ResolvedZone
 {
-    public string Glob { get; set; } = "";
+    /// <summary>The zone's directory as the user gave it (for "why this version" messages).</summary>
+    public string Path { get; set; } = "";
+
+    /// <summary><see cref="Path"/> normalized by <see cref="Tack.Core.Resolution.ZonePath.Normalize"/>; the
+    /// resolver compares the current directory's ancestors against this.</summary>
+    public string Key { get; set; } = "";
+
     public string Version { get; set; } = "";
     public bool Enforce { get; set; }
 
-    /// <summary>Precomputed by the compiler (longer literal prefix = more specific); the resolver picks the max.</summary>
-    public int Specificity { get; set; }
+    /// <summary>True when this entry was copied in from an all-tools (<c>*</c>) zone - only used to explain
+    /// "why". Left out of resolved.json when false.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool AllTools { get; set; }
 }
 
 /// <summary>
 /// One source-gen context for both config shapes. AOT-safe: the shim reads <see cref="ResolvedConfig"/>
-/// without reflection; the CLI/UI read and write <see cref="CentralConfig"/> through the same generator.
+/// without reflection; the CLI reads and writes <see cref="CentralConfig"/> through the same generator.
 /// </summary>
 [JsonSourceGenerationOptions(
     PropertyNameCaseInsensitive = true,

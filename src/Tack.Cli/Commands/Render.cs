@@ -8,6 +8,7 @@ internal static class Render
     public static string Describe(Resolution r) => r.Source switch
     {
         ResolutionSource.Passthrough => "(passthrough to PATH)",
+        ResolutionSource.ZoneNone => "(none - passthrough to PATH)",
         ResolutionSource.Unregistered => "(unregistered)",
         ResolutionSource.VersionNotInstalled => $"{r.Version} (NOT INSTALLED)",
         _ => r.Version ?? "?",
@@ -16,10 +17,11 @@ internal static class Render
     public static string SourceMarkup(ResolutionSource s) => s switch
     {
         ResolutionSource.EnvOverride => "[aqua]env[/]",
-        ResolutionSource.EnforceBinding => "[red]enforced[/]",
+        ResolutionSource.EnforcedZone => "[red]enforced zone[/]",
         ResolutionSource.TackYml => "[green]tack.yml[/]",
-        ResolutionSource.Binding => "[blue]binding[/]",
+        ResolutionSource.Zone => "[blue]zone[/]",
         ResolutionSource.Default => "[grey]default[/]",
+        ResolutionSource.ZoneNone => "[yellow]none zone[/]",
         ResolutionSource.Passthrough => "[grey]passthrough[/]",
         ResolutionSource.VersionNotInstalled => "[red]missing[/]",
         _ => "[grey]-[/]",

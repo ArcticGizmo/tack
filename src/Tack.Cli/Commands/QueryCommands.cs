@@ -22,7 +22,7 @@ public sealed class InfoCommand : Command<InfoSettings>
         var config = env.Load();
         if (config.Tools.Count == 0)
         {
-            AnsiConsole.MarkupLine("[yellow]No tools registered.[/] Use [green]tack register[/] to add one.");
+            AnsiConsole.MarkupLine("[yellow]No tools registered.[/] Use [green]tack tool add[/] to add one.");
             return 0;
         }
 
@@ -94,72 +94,6 @@ public sealed class WhichCommand : Command<WhichSettings>
             return 1;
         }
         Console.WriteLine(target); // plain + scriptable, like `mise which`
-        return 0;
-    }
-}
-
-// ---- list ----------------------------------------------------------------------------------------
-
-public sealed class ListCommand : Command
-{
-    public override int Execute(CommandContext context)
-    {
-        var env = new TackEnvironment();
-        var config = env.Load();
-        if (config.Tools.Count == 0)
-        {
-            AnsiConsole.MarkupLine("[yellow]No tools registered.[/] Use [green]tack register[/] to add one.");
-            return 0;
-        }
-
-        var resolver = env.ResolverFor(config);
-        var ctx = env.Context();
-        string cwd = Environment.CurrentDirectory;
-
-        var table = new Table().RoundedBorder();
-        table.AddColumn("tool");
-        table.AddColumn("versions");
-        table.AddColumn("default");
-        table.AddColumn("here");
-        foreach (var (name, tool) in config.Tools.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
-        {
-            string versions = string.Join(", ", tool.Versions.Keys.OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
-            string def = config.Defaults.TryGetValue(name, out var d) ? d : "-";
-            var r = resolver.Resolve(name, cwd, ctx);
-            string here = r.Resolved ? r.Version! : "-";
-            table.AddRow(Markup.Escape(name), Markup.Escape(versions), Markup.Escape(def), Markup.Escape(here));
-        }
-        AnsiConsole.Write(table);
-        return 0;
-    }
-}
-
-// ---- shims ---------------------------------------------------------------------------------------
-
-public sealed class ShimsCommand : Command
-{
-    public override int Execute(CommandContext context)
-    {
-        var env = new TackEnvironment();
-        AnsiConsole.MarkupLine($"[grey]shims dir:[/] {Markup.Escape(env.ShimsDir)}");
-
-        if (!Directory.Exists(env.ShimsDir))
-        {
-            AnsiConsole.MarkupLine("[yellow]shims dir does not exist yet - run [green]tack reshim[/].[/]");
-            return 0;
-        }
-
-        var exes = Directory.GetFiles(env.ShimsDir, "*.exe")
-            .Select(Path.GetFileNameWithoutExtension)
-            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        AnsiConsole.MarkupLine(exes.Count == 0
-            ? "[yellow]no shims generated.[/]"
-            : "shims: " + string.Join(", ", exes.Select(x => Markup.Escape(x!))));
-
-        AnsiConsole.MarkupLine(Render.OnPath(env.ShimsDir)
-            ? "[green]shims dir is on PATH.[/]"
-            : "[red]shims dir is NOT on PATH[/] - run [green]tack doctor[/].");
         return 0;
     }
 }

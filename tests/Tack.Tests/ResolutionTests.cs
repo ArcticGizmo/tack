@@ -4,23 +4,115 @@ using Xunit;
 
 namespace Tack.Tests;
 
-public class GlobTests
+public class ZonePathTests
 {
-    [Theory]
-    [InlineData("C:/work/**", "C:/work", true)]           // trailing /** matches the base dir itself
-    [InlineData("C:/work/**", "C:/work/a/b", true)]       // ...and any depth under it
-    [InlineData("C:/work/**", "C:/workshop", false)]      // not a prefix-of-segment false match
-    [InlineData("C:/work/*/repo", "C:/work/x/repo", true)]
-    [InlineData("C:/work/*/repo", "C:/work/x/y/repo", false)] // * is single-segment
-    [InlineData("C:\\work\\**", "c:/WORK/a", true)]       // separator + case insensitive
-    public void Matches(string glob, string dir, bool expected)
-        => Assert.Equal(expected, Glob.IsMatch(glob, dir));
+    [Fact]
+    public void Ancestors_walk_up_deepest_first_normalized()
+        => Assert.Equal(new[] { "c:/work/a/b", "c:/work/a", "c:/work", "c:" }, ZonePath.Ancestors(@"C:\Work\a\b\"));
 
     [Fact]
-    public void More_specific_glob_has_higher_specificity()
+    public void Drive_root_normalizes_to_its_ancestor_form()
+        => Assert.Contains(ZonePath.Normalize(@"C:\"), ZonePath.Ancestors(@"C:\work"));
+
+    [Theory]
+    [InlineData("C:/work/**", "C:/work")]
+    [InlineData(@"C:\work\**", @"C:\work")]
+    [InlineData("C:/work/exact", "C:/work/exact")]   // a bare path now covers its children too
+    [InlineData("C:/work/", "C:/work")]
+    [InlineData("C:/work/*/api/**", null)]           // mid-path wildcard: no single-directory equivalent
+    [InlineData("**/node_modules", null)]
+    public void Legacy_globs_map_to_a_directory(string glob, string? expected)
+        => Assert.Equal(expected, ZonePath.FromLegacyGlob(glob));
+
+    [Theory]
+    [InlineData(@"C:\work", true)]
+    [InlineData(@"C:\work\*", false)]
+    [InlineData(@"work\sub", false)]
+    [InlineData("", false)]
+    public void Validates_zone_directories(string path, bool ok)
+        => Assert.Equal(ok, ZonePath.Validate(path) is null);
+}
+
+public class ZoneRegistryTests
+{
+    [Fact]
+    public void Setting_the_same_directory_and_tool_replaces_rather_than_duplicates()
     {
-        Assert.True(Glob.Specificity("C:/work/employer/**") > Glob.Specificity("C:/work/**"));
-        Assert.True(Glob.Specificity("C:/work/exact") > Glob.Specificity("C:/work/**")); // no wildcard wins
+        var c = new CentralConfig();
+        Assert.True(ZoneRegistry.Set(c, @"C:\work", "node", "18", enforce: false).Added);
+
+        var r = ZoneRegistry.Set(c, "c:/WORK/", "node", "20", enforce: true); // same dir, different spelling
+        Assert.False(r.Added);
+        Assert.Equal("18", r.Previous!.Version);
+        var z = Assert.Single(c.Zones);
+        Assert.Equal("20", z.Version);
+        Assert.True(z.Enforce);
+    }
+
+    [Fact]
+    public void Different_tools_share_a_directory()
+    {
+        var c = new CentralConfig();
+        ZoneRegistry.Set(c, @"C:\work", "node", "18", false);
+        ZoneRegistry.Set(c, @"C:\work", "python", "3.12", false);
+        Assert.Equal(2, c.Zones.Count);
+    }
+
+    [Fact]
+    public void Remove_takes_one_tool_or_the_whole_directory()
+    {
+        var c = new CentralConfig();
+        ZoneRegistry.Set(c, @"C:\work", "node", "18", false);
+        ZoneRegistry.Set(c, @"C:\work", "python", "3.12", false);
+        ZoneRegistry.Set(c, @"C:\other", "node", "20", false);
+
+        Assert.Single(ZoneRegistry.Remove(c, @"c:\work\", "NODE"));
+        Assert.Equal(2, c.Zones.Count);
+
+        Assert.Single(ZoneRegistry.Remove(c, @"C:\work"));
+        Assert.Equal(@"C:\other", Assert.Single(c.Zones).Path);
+
+        Assert.Empty(ZoneRegistry.Remove(c, @"C:\nowhere"));
+    }
+
+    [Fact]
+    public void Drive_root_keeps_its_separator()
+    {
+        var c = new CentralConfig();
+        ZoneRegistry.Set(c, @"C:\", "node", "18", false);
+        Assert.Equal(@"C:\", c.Zones[0].Path);
+    }
+
+    [Fact]
+    public void Migrates_legacy_bindings_and_keeps_the_ones_it_cannot()
+    {
+        var c = new CentralConfig
+        {
+            Bindings = new List<LegacyBinding>
+            {
+                new() { Glob = "C:/work/**", Tools = { ["node"] = "18", ["python"] = "3.12" } },
+                new() { Glob = "C:/corp/**", Tools = { ["node"] = "18.19.0" }, Enforce = true },
+                new() { Glob = "C:/work/*/api/**", Tools = { ["node"] = "20" } },
+            },
+        };
+
+        ZoneRegistry.Migrate(c);
+
+        Assert.Equal(3, c.Zones.Count);
+        Assert.Contains(c.Zones, z => z.Path == "C:/work" && z.Tool == "python");
+        Assert.Contains(c.Zones, z => z.Path == "C:/corp" && z.Enforce);
+        Assert.Equal(new[] { "C:/work/*/api/**" }, ZoneRegistry.Unmigrated(c));
+
+        ZoneRegistry.Migrate(c); // idempotent
+        Assert.Equal(3, c.Zones.Count);
+    }
+
+    [Fact]
+    public void A_fully_migrated_config_drops_the_legacy_list()
+    {
+        var c = new CentralConfig { Bindings = new List<LegacyBinding> { new() { Glob = "C:/work/**", Tools = { ["node"] = "18" } } } };
+        ZoneRegistry.Migrate(c);
+        Assert.Null(c.Bindings);
     }
 }
 
@@ -59,7 +151,7 @@ public class MiniTackYmlTests
 public class CompilerTests
 {
     [Fact]
-    public void Builds_index_and_splits_bindings_per_tool()
+    public void Builds_index_and_splits_zones_per_tool()
     {
         var central = Sample();
         var rc = ConfigCompiler.Compile(central);
@@ -67,7 +159,50 @@ public class CompilerTests
         Assert.Equal("node", rc.Index["npm"]);   // exposed name -> owning tool
         Assert.Equal("node", rc.Index["node"]);  // tool's own name maps to itself
         Assert.Equal("20.11.0", rc.Tools["node"].Default);
-        Assert.Equal(2, rc.Tools["node"].Bindings.Count); // both the C:/work and C:/corp bindings target node
+        Assert.Equal(3, rc.Tools["node"].Zones.Count);
+        Assert.Contains(rc.Tools["node"].Zones, z => z.Key == "c:/work" && z.Path == @"C:\work");
+    }
+
+    [Fact]
+    public void Zones_for_unregistered_tools_are_dropped()
+    {
+        var central = Sample();
+        central.Zones.Add(new Zone { Path = @"C:\work", Tool = "ruby", Version = "3" });
+        Assert.False(ConfigCompiler.Compile(central).Tools.ContainsKey("ruby"));
+    }
+
+    [Fact]
+    public void All_tools_zones_are_copied_into_every_tool_unless_it_has_its_own_zone_there()
+    {
+        var rc = ConfigCompiler.Compile(ResolverTests.AllToolsConfig());
+
+        Assert.False(rc.Tools.ContainsKey("*")); // not a tool
+        var pyLegacy = Assert.Single(rc.Tools["python"].Zones, z => z.Key == "c:/work/legacy");
+        Assert.True(pyLegacy.AllTools);
+        Assert.Equal("none", pyLegacy.Version);
+
+        // C:\mixed: python gets the all-tools zone; node keeps only its own zone there.
+        Assert.Single(rc.Tools["python"].Zones, z => z.Key == "c:/mixed" && z.AllTools);
+        var nodeMixed = Assert.Single(rc.Tools["node"].Zones, z => z.Key == "c:/mixed");
+        Assert.False(nodeMixed.AllTools);
+        Assert.Equal("18", nodeMixed.Version);
+    }
+
+    [Fact]
+    public void An_all_tools_zone_with_a_real_version_is_ignored()
+    {
+        var central = Sample();
+        central.Zones.Add(new Zone { Path = @"C:\bad", Tool = "*", Version = "18" }); // hand-edited config
+        Assert.DoesNotContain(ConfigCompiler.Compile(central).Tools["node"].Zones, z => z.Key == "c:/bad");
+    }
+
+    [Fact]
+    public void AllTools_is_left_out_of_resolved_json_when_false()
+    {
+        string json = System.Text.Json.JsonSerializer.Serialize(
+            ConfigCompiler.Compile(ResolverTests.AllToolsConfig()), TackJson.Default.ResolvedConfig);
+        Assert.Contains("\"allTools\": true", json);
+        Assert.DoesNotContain("\"allTools\": false", json);
     }
 
     internal static CentralConfig Sample()
@@ -86,10 +221,11 @@ public class CompilerTests
                 },
             },
             Defaults = { ["node"] = "20.11.0" },
-            Bindings =
+            Zones =
             {
-                new Binding { Glob = "C:/work/**", Tools = { ["node"] = "18" } },
-                new Binding { Glob = "C:/corp/**", Tools = { ["node"] = "18.19.0" }, Enforce = true },
+                new Zone { Path = @"C:\work", Tool = "node", Version = "18" },
+                new Zone { Path = @"C:\work\modern", Tool = "node", Version = "20" },
+                new Zone { Path = @"C:\corp", Tool = "node", Version = "18.19.0", Enforce = true },
             },
         };
     }
@@ -142,28 +278,45 @@ public class ResolverTests
     }
 
     [Fact]
-    public void Binding_matches_by_directory_and_prefix_version()
+    public void Zone_covers_its_subtree_with_prefix_version()
     {
-        var r = BuildResolver().Resolve("node", @"C:\work\projA", Ctx());
-        Assert.Equal(ResolutionSource.Binding, r.Source);
+        var r = BuildResolver().Resolve("node", @"C:\work\projA\src", Ctx());
+        Assert.Equal(ResolutionSource.Zone, r.Source);
         Assert.Equal("18.19.0", r.Version); // "18" prefix -> 18.19.0
+        Assert.Equal(@"zone C:\work", r.Detail);
     }
 
     [Fact]
-    public void TackYml_beats_a_non_enforced_binding()
+    public void Zone_covers_its_own_directory()
+        => Assert.Equal(ResolutionSource.Zone, BuildResolver().Resolve("node", @"c:\WORK", Ctx()).Source);
+
+    [Fact]
+    public void Deepest_zone_wins()
+    {
+        var r = BuildResolver().Resolve("node", @"C:\work\modern\app", Ctx());
+        Assert.Equal("20.11.0", r.Version);
+        Assert.Equal(@"zone C:\work\modern", r.Detail);
+    }
+
+    [Fact]
+    public void Zone_matches_whole_directory_names_only()
+        => Assert.Equal(ResolutionSource.Default, BuildResolver().Resolve("node", @"C:\workshop", Ctx()).Source);
+
+    [Fact]
+    public void TackYml_beats_a_non_enforced_zone()
     {
         var files = new Dictionary<string, string> { [@"C:\work\projA\tack.yml"] = "tools:\n  node: 20.11.0\n" };
         var r = BuildResolver().Resolve("node", @"C:\work\projA\src", Ctx(files: files));
         Assert.Equal(ResolutionSource.TackYml, r.Source);
-        Assert.Equal("20.11.0", r.Version); // nearest tack.yml (walked up from src) wins over the C:/work binding
+        Assert.Equal("20.11.0", r.Version); // nearest tack.yml (walked up from src) wins over the C:\work zone
     }
 
     [Fact]
-    public void Enforced_binding_beats_tack_yml()
+    public void Enforced_zone_beats_tack_yml()
     {
         var files = new Dictionary<string, string> { [@"C:\corp\proj\tack.yml"] = "tools:\n  node: 20.11.0\n" };
         var r = BuildResolver().Resolve("node", @"C:\corp\proj", Ctx(files: files));
-        Assert.Equal(ResolutionSource.EnforceBinding, r.Source);
+        Assert.Equal(ResolutionSource.EnforcedZone, r.Source);
         Assert.Equal("18.19.0", r.Version);
     }
 
@@ -180,6 +333,117 @@ public class ResolverTests
         var env = new Dictionary<string, string> { ["TACK_NODE_VERSION"] = "99.0.0" };
         var r = BuildResolver().Resolve("node", @"C:\x", Ctx(env: env));
         Assert.Equal(ResolutionSource.VersionNotInstalled, r.Source);
+    }
+
+    // Sample() plus: C:\work\legacy switches node off, C:\work\legacy\revived switches it back on, and C:\corp\free
+    // is an enforced none zone inside the enforced C:\corp one.
+    private static Resolver NoneResolver()
+    {
+        var c = CompilerTests.Sample();
+        c.Zones.Add(new Zone { Path = @"C:\work\legacy", Tool = "node", Version = "none" });
+        c.Zones.Add(new Zone { Path = @"C:\work\legacy\revived", Tool = "node", Version = "20" });
+        c.Zones.Add(new Zone { Path = @"C:\corp\free", Tool = "node", Version = "None", Enforce = true });
+        return new Resolver(ConfigCompiler.Compile(c));
+    }
+
+    [Fact]
+    public void None_zone_switches_off_an_ancestor_zone_and_the_default()
+    {
+        var r = NoneResolver().Resolve("npm", @"C:\work\legacy\app", Ctx());
+        Assert.Equal(ResolutionSource.ZoneNone, r.Source);
+        Assert.False(r.Resolved);
+        Assert.Null(r.Version);
+        Assert.Equal("node", r.Tool);
+        Assert.Equal(@"zone C:\work\legacy sets node to none", r.Detail);
+    }
+
+    [Fact]
+    public void Deeper_zone_switches_tack_back_on_under_a_none_zone()
+    {
+        var r = NoneResolver().Resolve("node", @"C:\work\legacy\revived\src", Ctx());
+        Assert.Equal(ResolutionSource.Zone, r.Source);
+        Assert.Equal("20.11.0", r.Version);
+    }
+
+    [Fact]
+    public void TackYml_beats_a_non_enforced_none_zone()
+    {
+        var files = new Dictionary<string, string> { [@"C:\work\legacy\app\tack.yml"] = "tools:\n  node: 18\n" };
+        var r = NoneResolver().Resolve("node", @"C:\work\legacy\app", Ctx(files: files));
+        Assert.Equal(ResolutionSource.TackYml, r.Source);
+    }
+
+    [Fact]
+    public void Enforced_none_zone_beats_tack_yml_and_the_enforced_zone_above_it()
+    {
+        var files = new Dictionary<string, string> { [@"C:\corp\free\x\tack.yml"] = "tools:\n  node: 20\n" };
+        var r = NoneResolver().Resolve("node", @"C:\corp\free\x", Ctx(files: files));
+        Assert.Equal(ResolutionSource.ZoneNone, r.Source);
+        Assert.StartsWith(@"enforced zone C:\corp\free", r.Detail);
+    }
+
+    [Fact]
+    public void Env_override_still_beats_a_none_zone()
+    {
+        var env = new Dictionary<string, string> { ["TACK_NODE_VERSION"] = "18.19.0" };
+        Assert.Equal(ResolutionSource.EnvOverride, NoneResolver().Resolve("node", @"C:\work\legacy", Ctx(env: env)).Source);
+    }
+
+    // Sample() plus python (with a default), an all-tools none zone at C:\work\legacy, node back on in
+    // C:\work\legacy\app, and a node zone at the SAME directory as an all-tools zone at C:\mixed.
+    internal static CentralConfig AllToolsConfig()
+    {
+        var c = CompilerTests.Sample();
+        c.Tools["python"] = new RegisteredTool
+        {
+            Versions = { ["3.12.1"] = new InstalledVersion { BinDir = @"C:\tools\py312", Exposes = { "python", "pip" } } },
+        };
+        c.Defaults["python"] = "3.12.1";
+        c.Zones.Add(new Zone { Path = @"C:\work\legacy", Tool = "*", Version = "none" });
+        c.Zones.Add(new Zone { Path = @"C:\work\legacy\app", Tool = "node", Version = "20" });
+        c.Zones.Add(new Zone { Path = @"C:\mixed", Tool = "*", Version = "none" });
+        c.Zones.Add(new Zone { Path = @"C:\mixed", Tool = "node", Version = "18" });
+        return c;
+    }
+
+    private static Resolver AllToolsResolver() => new(ConfigCompiler.Compile(AllToolsConfig()));
+
+    [Fact]
+    public void All_tools_none_zone_switches_off_every_tool()
+    {
+        var resolver = AllToolsResolver();
+        foreach (var cmd in new[] { "node", "npm", "python", "pip" })
+        {
+            var r = resolver.Resolve(cmd, @"C:\work\legacy\x", Ctx());
+            Assert.Equal(ResolutionSource.ZoneNone, r.Source);
+            Assert.Equal(@"zone C:\work\legacy sets every tool to none", r.Detail);
+        }
+    }
+
+    [Fact]
+    public void A_deeper_tool_zone_switches_just_that_tool_back_on()
+    {
+        var resolver = AllToolsResolver();
+        Assert.Equal("20.11.0", resolver.Resolve("node", @"C:\work\legacy\app", Ctx()).Version);
+        Assert.Equal(ResolutionSource.ZoneNone, resolver.Resolve("python", @"C:\work\legacy\app", Ctx()).Source);
+    }
+
+    [Fact]
+    public void A_tools_own_zone_beats_an_all_tools_zone_at_the_same_directory()
+    {
+        var resolver = AllToolsResolver();
+        var node = resolver.Resolve("node", @"C:\mixed", Ctx());
+        Assert.Equal(ResolutionSource.Zone, node.Source);
+        Assert.Equal("18.19.0", node.Version);
+        Assert.Equal(ResolutionSource.ZoneNone, resolver.Resolve("python", @"C:\mixed", Ctx()).Source);
+    }
+
+    [Fact]
+    public void TackYml_beats_a_non_enforced_all_tools_zone()
+    {
+        var files = new Dictionary<string, string> { [@"C:\work\legacy\x\tack.yml"] = "tools:\n  python: 3.12\n" };
+        var r = AllToolsResolver().Resolve("python", @"C:\work\legacy\x", Ctx(files: files));
+        Assert.Equal(ResolutionSource.TackYml, r.Source);
     }
 
     [Fact]

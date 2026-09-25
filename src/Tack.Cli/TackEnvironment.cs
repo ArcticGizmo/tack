@@ -13,7 +13,19 @@ namespace Tack.Cli;
 public sealed class TackEnvironment
 {
     public ConfigStore Store { get; } = new();
+
+    /// <summary>The canonical shims dir wired onto PATH. PATH/doctor checks use this even while disabled.</summary>
     public string ShimsDir => TackPaths.ShimsDir;
+
+    /// <summary>Where the shims dir is parked while disabled.</summary>
+    public string DisabledShimsDir => TackPaths.DisabledShimsDir;
+
+    /// <summary>True when tack is disabled (interception off; see <see cref="ShimGate"/>).</summary>
+    public bool IsDisabled => ShimGate.IsDisabled(DisabledShimsDir);
+
+    /// <summary>The shims dir writes should target now - the parked dir while disabled, so config still works.</summary>
+    public string ActiveShimsDir => ShimGate.ActiveDir(ShimsDir, DisabledShimsDir);
+
     public string ResolvedJson => TackPaths.ResolvedJson;
     public string InstallDir => AppContext.BaseDirectory;
 
@@ -43,5 +55,7 @@ public sealed class TackEnvironment
         return new ShimPayload { ShimExe = exe, SupportFiles = support };
     }
 
-    public ReshimResult Reshim(CentralConfig config) => Reshimmer.Run(config, ShimsDir, ResolvedJson, ShimPayload());
+    // Reshim into the ACTIVE dir so adding tools/zones keeps working while disabled (writes land in the
+    // parked dir and go live on `tack enable`).
+    public ReshimResult Reshim(CentralConfig config) => Reshimmer.Run(config, ActiveShimsDir, ResolvedJson, ShimPayload());
 }

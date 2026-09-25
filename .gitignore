@@ -22,7 +22,7 @@ spikes/m1-shim/reach-test/VsReachTest/
 spikes/m1-shim/reach-test/*.task.xml
 spikes/m1-shim/reach-test/double-click-me.cmd
 
-# Local UI-work screenshots (kept on disk, not committed)
+# Local screenshots (kept on disk, not committed)
 captures/
 
 # OS cruft

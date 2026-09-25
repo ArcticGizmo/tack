@@ -5,7 +5,7 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace Tack.Cli;
 
 /// <summary>
-/// The full tack.yml parser used by the CLI/UI for authoring and validation (YamlDotNet). The shim uses
+/// The full tack.yml parser used by the CLI for authoring and validation (YamlDotNet). The shim uses
 /// Core's dependency-free <see cref="MiniTackYml"/> instead; a cross-check test asserts the two agree on the
 /// supported grammar, so the shim's mini-parser can't silently drift from what authors write.
 /// </summary>

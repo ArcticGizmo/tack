@@ -3,8 +3,8 @@ using System.Text.RegularExpressions;
 namespace Tack.Core.Changelog;
 
 /// <summary>
-/// Shared, UI-free helpers for the lightweight markdown the changelog uses. Kept in Core so the CLI's
-/// Spectre renderer and the UI's Avalonia renderer strip inline markup identically.
+/// Helpers for the lightweight markdown the changelog uses. Kept in Core, free of Spectre, so it stays
+/// unit-testable on its own.
 /// </summary>
 public static class ChangelogMarkup
 {
