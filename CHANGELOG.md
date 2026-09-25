@@ -9,6 +9,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.1.1] - 2026-09-25
+
+- `npx` works again (tack had been trying to run node's bash script)
+
+---
+
 ## [v0.1.0] - 2026-09-25
 
 The first tack: per-directory tool dispatch that reaches the processes shell hooks can't.

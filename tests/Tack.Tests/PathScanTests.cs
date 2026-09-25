@@ -75,6 +75,34 @@ public sealed class PathScanTests
     }
 
     [Fact]
+    public void Prefers_the_cmd_over_an_extensionless_shell_script_beside_it()
+    {
+        // node ships both npx (a bash script) and npx.cmd; CreateProcess can only run the latter.
+        var report = PathScan.FindOnPath(
+            "npx",
+            _ => @"C:\fnm\node-versions\v24\installation",
+            excludeDirs: Array.Empty<string>(),
+            fileExists: Files(
+                @"C:\fnm\node-versions\v24\installation\npx",
+                @"C:\fnm\node-versions\v24\installation\npx.cmd"));
+
+        Assert.Single(report);
+        Assert.Equal(@"C:\fnm\node-versions\v24\installation\npx.cmd", report[0].ExePath);
+    }
+
+    [Fact]
+    public void Never_matches_an_extensionless_file_alone()
+    {
+        var report = PathScan.FindOnPath(
+            "npx",
+            _ => @"C:\somewhere",
+            excludeDirs: Array.Empty<string>(),
+            fileExists: Files(@"C:\somewhere\npx"));
+
+        Assert.Empty(report);
+    }
+
+    [Fact]
     public void Expands_environment_references_in_path_entries()
     {
         // A PATH entry like %NVM_SYMLINK% must be expanded before probing, or the tool is missed.
