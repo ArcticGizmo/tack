@@ -123,7 +123,7 @@ The variables live only in your machine's config. A `tack.yml` can pick `claude:
 
 ### PATH repair
 
-Windows builds the effective PATH as *system entries, then user entries*. A shims dir on the user PATH therefore still loses to any system-wide Node or Python. **`tack doctor --fix`** regenerates the shims and moves the shims dir to the **front of the system PATH**. It asks for elevation through UAC for that one write, and only that write.
+Windows builds the effective PATH as *system entries, then user entries*. A shims dir on the user PATH therefore still loses to any system-wide Node or Python. **`tack doctor --fix`** restamps the shims, offers to remove ones your config no longer uses, and moves the shims dir to the **front of the system PATH**. Each of those asks for elevation through UAC only if it has something to write.
 
 It edits the registry value directly, so tokens like `%SystemRoot%\system32` and `%NVM_HOME%` stay as tokens instead of being baked into literal paths. It prints the full before/after and saves a timestamped backup in the `path-backups` folder of tack's install, so any edit can be undone by hand. The user PATH is left alone.
 
@@ -137,8 +137,10 @@ Configuration keeps working while tack is disabled: add tools and zones as norma
 
 - **`tack changelog`** shows what's new in the latest release (`--all` for the full history).
 - The shims carry honest Windows file metadata, so a copied `node.exe` identifies itself as tack rather than as an anonymous unsigned binary.
-- Reshims leave unchanged shims alone. A shim that's in use, or being scanned by antivirus, is moved aside rather than causing an error.
-- tack only ever writes the **system** PATH, never your user PATH. That write, and nothing else, asks for admin through UAC: once at install (`tack setup`), and again on `doctor --fix` or uninstall.
+- Stamping leaves identical shims alone (it compares their contents). A shim that's in use, or being scanned by antivirus, is moved aside rather than causing an error.
+- tack only ever writes the **system** PATH, never your user PATH.
+- The shims live in an admin-only folder, so writing them asks for admin through UAC. That happens only when a **new command name** appears (say `tool add` brings in `npm`), not for new versions, zones or settings. If you decline, the tool is configured but not intercepted until `tack setup`.
+- Removing a tool leaves its shims in place. They just pass calls through, and another account may still use them. `tack doctor --fix` offers to remove them.
 
 ## Installing
 
@@ -279,9 +281,9 @@ Core, so it's all unit-testable.
 
 Debug builds run as an isolated **dev profile**. They keep their own config and `resolved.json` under
 `%LocalAppData%\tack (Dev)\` and their own shims under `%ProgramFiles%\Tack (Dev)\shims\`, so hacking on tack
-never touches your real setup. Writing those shims needs admin, so run a dev `reshim` or `doctor --fix` from an
-elevated terminal. Set `TACK_DEV=0` to point a
-debug build at the real profile, or `TACK_DEV=1` to force a release build into dev.
+never touches your real setup. Writing those shims needs admin, so a dev `tool add` of a new command name asks
+through UAC, like a release does. After a rebuild, `run.bat reshim` refreshes the dev shims. Set `TACK_DEV=0` to
+point a debug build at the real profile, or `TACK_DEV=1` to force a release build into dev.
 
 To try a dev build as if it were really installed, run `run.bat doctor --fix`. This puts the dev shims at the
 front of the system PATH, **directly behind** the release tack's. The dev build then beats every real install

@@ -7,8 +7,8 @@ using Tack.Core.Platform;
 namespace Tack.Cli.Commands;
 
 /// <summary>
-/// <c>tack setup</c>: put tack on the SYSTEM PATH - shims dir at the front, tack.exe's dir at the end. This is
-/// the install's PATH step. The Velopack install hook can't do it unelevated (it's killed after 30 s, too short
+/// <c>tack setup</c>: put tack on the SYSTEM PATH - shims dir at the front, tack.exe's dir at the end - and stamp
+/// the shims your config needs. This is the install's PATH step, and the repair for either being skipped. The Velopack install hook can't do it unelevated (it's killed after 30 s, too short
 /// to sit on a UAC prompt) and must never fall back to the user PATH, so it runs here instead: from the first
 /// run after Setup, from install.ps1 in the user's own terminal, or by hand to retry after declining UAC.
 /// </summary>
@@ -47,7 +47,16 @@ internal static class PathSetup
         }
     }
 
+    // PATH, then the shims your config needs; each asks for UAC only if it has something to write.
     private static int Apply(WindowsPathInstaller installer)
+    {
+        int rc = WirePath(installer);
+        var env = new TackEnvironment();
+        bool shims = Shims.Sync(env, env.Load(), checkPayload: true);
+        return rc != 0 ? rc : shims ? 0 : 1;
+    }
+
+    private static int WirePath(WindowsPathInstaller installer)
     {
         if (!installer.NeedsRegister())
         {

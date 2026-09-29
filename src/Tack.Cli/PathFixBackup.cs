@@ -27,7 +27,7 @@ internal static partial class PathFixBackup
         return BackupName().IsMatch(name) ? Path.Combine(TackPaths.Machine.PathBackupsDir, name) : null;
     }
 
-    [GeneratedRegex(@"^path-fix-\d{8}-\d{6}\.json$")]
+    [GeneratedRegex(@"^path-fix-\d{8}-\d{6}\.json\z")]
     private static partial Regex BackupName();
 
     /// <summary>Best-effort write; returns the path on success, null if it couldn't be saved.</summary>

@@ -25,7 +25,7 @@ public sealed class DisableCommand : Command
         env.Save(config);
         AnsiConsole.MarkupLine("[green]tack disabled for you.[/] Your tool calls now fall through to the rest of PATH, in every shell.");
         AnsiConsole.MarkupLine("[grey]tools, zones and use still work; run [green]tack enable[/] to turn it back on.[/]");
-        Mutations.ReportReshim(env.Reshim(config));
+        Shims.Sync(env, config);
         return 0;
     }
 }
@@ -47,7 +47,7 @@ public sealed class EnableCommand : Command
         config.Settings.Disabled = false;
         env.Save(config);
         AnsiConsole.MarkupLine("[green]tack enabled.[/] Interception is live again.");
-        Mutations.ReportReshim(env.Reshim(config));
+        Shims.Sync(env, config);
         return 0;
     }
 }

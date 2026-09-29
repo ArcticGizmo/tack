@@ -33,17 +33,18 @@ internal static class InstallHook
         .OnFirstRun(_ => IsFirstRun = true);
 
     /// <summary>On install/update: wire the system PATH if already elevated (never prompt here, never touch the
-    /// user PATH), then (re)stamp shims from existing config with this build's shim binary. Shim stamping is
-    /// best-effort - a copy locked by a running tool mid-update must not fail the install; `tack doctor`/`tack
-    /// reshim` recover any missed shims. An update needs no PATH change: the install dir (...\current) is stable
-    /// across versions.</summary>
+    /// user PATH), compile the user's config, and - again only if elevated, since the shims dir is admin-owned -
+    /// (re)stamp its shims with this build's shim binary. Shim stamping is best-effort - a copy locked by a running
+    /// tool mid-update must not fail the install; `tack setup`/`tack doctor --fix` recover any missed shims. An
+    /// update needs no PATH change: the install dir (...\current) is stable across versions.</summary>
     public static void Apply()
     {
         var env = new TackEnvironment();
-        IPathInstaller? path = Elevation.IsAdministrator() ? new WindowsPathInstaller(shimsDir: env.ShimsDir) : null;
+        bool elevated = Elevation.IsAdministrator();
+        IPathInstaller? path = elevated ? new WindowsPathInstaller(shimsDir: env.ShimsDir) : null;
         try
         {
-            FirstRun.Apply(path, env.Load(), env.ShimsDir, env.ResolvedJson, env.ShimPayload());
+            FirstRun.Apply(path, env.Load(), env.ShimsDir, env.ResolvedJson, env.ShimPayload(), stamp: elevated);
         }
         catch
         {

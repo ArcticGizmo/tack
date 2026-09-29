@@ -37,7 +37,7 @@ public static class PathDoctor
 
         var report = new DoctorReport();
         string shims = Norm(shimsDir);
-        var names = ExposedNames(config);
+        var names = ShimName.Exposed(config);
 
         // `tack disable` is a per-user setting: the shims stay on PATH, so every other check still applies.
         if (config.Settings.Disabled)
@@ -91,16 +91,14 @@ public static class PathDoctor
                     "run 'tack disable' on that instance to hand them over (fine to ignore if it's already disabled)");
         }
 
-        // Stale shims.
+        // Stale shims: harmless (they pass straight through), and possibly another account's.
         if (dirExists(shimsDir))
-        {
-            foreach (var exe in Directory.GetFiles(shimsDir, "*.exe"))
-            {
-                string b = Path.GetFileNameWithoutExtension(exe);
-                if (!names.Contains(b))
-                    report.Add($"Stale shim '{b}'", CheckStatus.Warn, "no longer exposed; run tack doctor --fix");
-            }
-        }
+            foreach (var name in ShimStamper.Stale(names, shimsDir))
+                report.Add($"Stale shim '{name}'", CheckStatus.Warn,
+                    "not in your config; it only passes calls through - tack doctor --fix offers to remove it");
+
+        foreach (var bad in ShimName.Invalid(config))
+            report.Add("Invalid command name", CheckStatus.Fail, $"{bad}; it's never intercepted - fix it in config.json");
 
         // Missing binDirs.
         foreach (var (toolName, tool) in config.Tools)
@@ -118,16 +116,6 @@ public static class PathDoctor
             report.Add("No tools registered", CheckStatus.Warn, "use 'tack tool add' to add an install");
 
         return report;
-    }
-
-    private static HashSet<string> ExposedNames(CentralConfig c)
-    {
-        var s = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var t in c.Tools.Values)
-            foreach (var v in t.Versions.Values)
-                foreach (var e in v.Exposes)
-                    s.Add(e);
-        return s;
     }
 
     /// <summary>Say exactly which PATH holds the shims dir, and where: "system PATH, entry 2". A user-PATH-only

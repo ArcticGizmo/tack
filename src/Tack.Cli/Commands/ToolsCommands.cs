@@ -31,6 +31,11 @@ public sealed class ToolsAddSettings : CommandSettings
     [Description("Comma-separated binary names; auto-detected from the binDir if omitted.")]
     public string? Exposes { get; init; }
 
+    /// <summary>The names given with --exposes (empty if none).</summary>
+    public List<string> ExposesList => Exposes is { Length: > 0 } e
+        ? e.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
+        : new List<string>();
+
     [CommandOption("--env <NAME=VALUE>")]
     [Description("An environment variable this version's commands run with; repeat for more. %VARS% expand at call time, and NAME= unsets it.")]
     public string[]? Env { get; init; }
@@ -40,6 +45,10 @@ public sealed class ToolsAddSettings : CommandSettings
         var s = ToolSpec.Parse(Spec);
         if (string.IsNullOrEmpty(s.Tool) || string.IsNullOrEmpty(s.Version))
             return ValidationResult.Error("Specify tool@version, e.g. node@20.11.0");
+        // The tool's own name is always shimmed, so it has to be a valid command name too.
+        foreach (var name in ExposesList.Prepend(s.Tool))
+            if (ShimName.Problem(name) is { } why)
+                return ValidationResult.Error($"'{name}' can't be a command name: {why}.");
         if (!string.IsNullOrWhiteSpace(PositionalBinDir) && !string.IsNullOrWhiteSpace(PathOption))
             return ValidationResult.Error("Give the binDir once - either as the second argument or with --path, not both.");
         VersionEnv.Parse(Env, out var envError);
@@ -75,9 +84,17 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
             return 1;
         }
 
-        var exposes = settings.Exposes is { Length: > 0 } e
-            ? e.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
-            : ToolProbe.DetectExposes(binDir);
+        var exposes = settings.ExposesList;
+        if (exposes.Count == 0)
+        {
+            // Detected names are whatever files the folder holds; skip the ones that can't be commands.
+            exposes = ToolProbe.DetectExposes(binDir);
+            foreach (var name in exposes.Where(n => !ShimName.IsValid(n)).ToList())
+            {
+                AnsiConsole.MarkupLine($"[yellow]skipping '{Markup.Escape(name)}':[/] [grey]{Markup.Escape(ShimName.Problem(name)!)}[/]");
+                exposes.Remove(name);
+            }
+        }
         if (!exposes.Any(x => string.Equals(x, spec.Tool, StringComparison.OrdinalIgnoreCase)))
             exposes.Insert(0, spec.Tool); // the tool's own name must be shimmed
 
@@ -97,11 +114,11 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
         AnsiConsole.MarkupLine($"[grey]exposes:[/] {Markup.Escape(string.Join(", ", exposes))}");
         foreach (var line in Render.EnvLines(versionEnv))
             AnsiConsole.MarkupLine($"[grey]env:[/] {Markup.Escape(line)}");
-        Mutations.ReportReshim(env.Reshim(config));
+        Shims.Sync(env, config);
         if (config.Settings.Disabled)
             AnsiConsole.MarkupLine("[yellow]note:[/] tack is disabled - this is configured but won't take effect until [green]tack enable[/].");
         else if (!Render.OnPath(env.ShimsDir))
-            AnsiConsole.MarkupLine("[yellow]note:[/] the shims dir is not on PATH yet - installing tack wires it up, or run [green]tack doctor[/].");
+            AnsiConsole.MarkupLine($"[yellow]note:[/] the shims dir is not on PATH yet - installing tack wires it up, or run [green]{Shims.RepairCommand}[/].");
         return 0;
     }
 
@@ -300,7 +317,7 @@ public sealed class ToolsRemoveCommand : Command<ToolsRemoveSettings>
         foreach (var z in result.OrphanedZones)
             AnsiConsole.MarkupLine($"[yellow]zone now points at a removed version:[/] {Markup.Escape(z)} [grey](edit with tack zone)[/]");
 
-        Mutations.ReportReshim(env.Reshim(config));
+        Shims.Sync(env, config);
         return 0;
     }
 

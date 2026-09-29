@@ -11,7 +11,7 @@ namespace Tack.Cli.Commands;
 public sealed class DoctorSettings : CommandSettings
 {
     [CommandOption("--fix")]
-    [Description("Repair what doctor can: regenerate shims, and promote the shims dir to the front of the system PATH (prompts for elevation). A dev build goes just behind the release tack's shims.")]
+    [Description("Repair what doctor can: restamp shims, offer to remove ones your config doesn't use, and promote the shims dir to the front of the system PATH (prompts for elevation). A dev build goes just behind the release tack's shims.")]
     public bool Fix { get; init; }
 }
 
@@ -58,8 +58,10 @@ public sealed class DoctorCommand : Command<DoctorSettings>
     {
         AnsiConsole.MarkupLine("[grey]fixing...[/]");
 
-        // Regenerate shims + prune stale ones.
-        Mutations.ReportReshim(env.Reshim(env.Load()));
+        // Recompile, restamp anything missing or from an older shim build, and offer to prune shims nobody here uses.
+        var config = env.Load();
+        Shims.Sync(env, config, checkPayload: true);
+        Shims.PruneStale(env, config);
 
         if (!OperatingSystem.IsWindows())
         {

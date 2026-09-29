@@ -7,24 +7,6 @@ using Tack.Core.Maintenance;
 
 namespace Tack.Cli.Commands;
 
-internal static class Mutations
-{
-    public static void ReportReshim(ReshimResult r)
-    {
-        if (r.ShimsDirNeedsAdmin)
-            AnsiConsole.MarkupLine("[yellow]resolved.json updated, but the shims dir needs admin to write, so shims weren't updated.[/] [grey]re-run from an elevated terminal.[/]");
-        else if (r.ShimPayloadMissing)
-            AnsiConsole.MarkupLine("[yellow]resolved.json updated, but tack-shim.exe was not found next to tack, so no shims were stamped (expected under a dev `dotnet run`).[/]");
-        else
-            AnsiConsole.MarkupLine($"[grey]reshim:[/] {r.ShimsWritten} shim(s) written, {r.ShimsUnchanged} up to date, {r.ShimsPruned} pruned"
-                + (r.ShimNames.Count > 0 ? $" [grey]({Markup.Escape(string.Join(", ", r.ShimNames))})[/]" : ""));
-        foreach (var path in r.Locked)
-            AnsiConsole.MarkupLine($"[yellow]couldn't update {Markup.Escape(Path.GetFileName(path))}[/] [grey](in use - run [green]tack reshim[/] once it's free)[/]");
-        foreach (var glob in r.UnmigratedBindings)
-            AnsiConsole.MarkupLine($"[yellow]old binding '{Markup.Escape(glob)}' no longer applies[/] [grey](zones take a plain directory; see tack doctor)[/]");
-    }
-}
-
 // ---- use -----------------------------------------------------------------------------------------
 
 public sealed class UseSettings : CommandSettings
@@ -89,8 +71,8 @@ public sealed class ReshimCommand : Command
 {
     public override int Execute(CommandContext context)
     {
+        // The explicit repair: also refreshes shims left over from an older shim build.
         var env = new TackEnvironment();
-        Mutations.ReportReshim(env.Reshim(env.Load()));
-        return 0;
+        return Shims.Sync(env, env.Load(), checkPayload: true) ? 0 : 1;
     }
 }

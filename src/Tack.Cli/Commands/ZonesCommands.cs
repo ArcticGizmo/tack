@@ -76,7 +76,7 @@ public sealed class ZonesAddCommand : Command<ZonesAddSettings>
         // An all-tools zone covers whatever is registered, now or later - nothing to check.
         if (!all) NoteRegistration(config, spec.Tool, version, none);
 
-        Mutations.ReportReshim(env.Reshim(config));
+        Shims.Sync(env, config);
         return 0;
     }
 
@@ -174,7 +174,7 @@ public sealed class ZonesRemoveCommand : Command<ZonesRemoveSettings>
         env.Save(config);
         foreach (var z in removed)
             AnsiConsole.MarkupLine($"[green]removed zone[/] {Markup.Escape(z.Path)} -> {Markup.Escape(ZoneText.Spec(z))}");
-        Mutations.ReportReshim(env.Reshim(config));
+        Shims.Sync(env, config);
         return 0;
     }
 

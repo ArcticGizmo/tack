@@ -44,7 +44,7 @@ app.Configure(cfg =>
             .WithDescription("List registered tools and versions (--expand for copyable paths).");
     }).WithAlias("tools");
     cfg.AddCommand<SetupCommand>("setup")
-        .WithDescription("Put tack on the system PATH (prompts for elevation). Run by the installer; re-run if you declined.");
+        .WithDescription("Put tack on the system PATH and stamp your shims (prompts for elevation). Run by the installer; re-run if you declined.");
     cfg.AddCommand<DoctorCommand>("doctor")
         .WithDescription("Diagnose PATH and shim health (--fix to repair).");
     cfg.AddCommand<DisableCommand>("disable")
@@ -85,6 +85,14 @@ app.Configure(cfg =>
 
     // Hidden: the elevated half of `tack doctor --fix` (machine-PATH write). Invoked via a UAC relaunch.
     cfg.AddCommand<ApplyMachinePathCommand>("apply-machine-path").IsHidden();
+
+    // Hidden: the admin-only steps a UAC relaunch runs (see ElevatedCommands).
+    cfg.AddBranch<CommandSettings>("elevated", elevated =>
+    {
+        elevated.HideBranch();
+        elevated.AddCommand<ElevatedShimsCommand>("shims").IsHidden();
+        elevated.AddCommand<ElevatedPruneCommand>("prune").IsHidden();
+    });
 });
 
 return app.Run(args);

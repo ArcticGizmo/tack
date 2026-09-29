@@ -7,7 +7,7 @@ namespace Tack.Cli;
 
 /// <summary>
 /// Shared services for the commands: the config store, the well-known paths, a resolver built from current
-/// config, and reshim. Every command is a thin shell over Tack.Core - this just wires the real filesystem
+/// config, and compiling. Every command is a thin shell over Tack.Core - this just wires the real filesystem
 /// and environment in.
 /// </summary>
 public sealed class TackEnvironment
@@ -47,5 +47,6 @@ public sealed class TackEnvironment
         return new ShimPayload { ShimExe = exe, SupportFiles = support };
     }
 
-    public ReshimResult Reshim(CentralConfig config) => Reshimmer.Run(config, ShimsDir, ResolvedJson, ShimPayload());
+    /// <summary>Compile this user's config into resolved.json. Stamping shims is <see cref="Shims"/>' job.</summary>
+    public CompileResult Compile(CentralConfig config) => Reshimmer.Compile(config, ResolvedJson);
 }
