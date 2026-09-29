@@ -57,7 +57,7 @@ echo Packaging ...
 vpk pack --packId Tack --packTitle "Tack" --packVersion %VERSION% --packDir publish\ --mainExe tack.exe --shortcuts None --outputDir releases\
 
 if %ERRORLEVEL% neq 0 (
-    echo Pack failed. Is the vpk CLI installed? Run: dotnet tool install -g vpk
+    echo Pack failed. Is the vpk CLI installed, at the version Tack.Cli.csproj pins? Run: dotnet tool update -g vpk --version 1.2.158
     exit /b %ERRORLEVEL%
 )
 
