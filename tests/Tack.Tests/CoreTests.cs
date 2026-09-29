@@ -26,4 +26,19 @@ public class CoreTests
         Assert.Equal(TackProfile.IsDev, TackProfile.DisplaySuffix == " (Dev)");
         Assert.Contains(TackProfile.DataFolderName, new[] { "tack", "tack (Dev)" });
     }
+
+    [Theory]
+    [InlineData(@"C:\Program Files\Tack (Dev)\shims\", "tack (Dev)")]
+    [InlineData(@"C:\Program Files\Tack (Dev)\shims", "tack (Dev)")]
+    [InlineData(@"C:\Users\someone\AppData\Local\tack (Dev)\shims\", "tack (Dev)")] // case doesn't matter
+    [InlineData(@"C:\Program Files\Tack\shims\", "tack")]
+    [InlineData(@"C:\Users\someone\AppData\Local\tack\shims\", "tack")]
+    [InlineData(@"C:\Program Files\Tack (Dev) old\shims\", "tack")]                  // only an exact name
+    [InlineData(@"C:\Program Files\Tack (Dev)\", "tack")]                            // the folder itself, not its parent
+    [InlineData(@"C:\", "tack")]
+    public void A_shim_takes_its_profile_from_the_folder_its_shims_folder_is_in(string shimsDir, string expected)
+    {
+        // Not from IsDev: a shim's profile must not follow TACK_DEV or how the shim binary was built.
+        Assert.Equal(expected, TackProfile.ForShimsDir(shimsDir));
+    }
 }

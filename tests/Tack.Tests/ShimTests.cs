@@ -224,6 +224,71 @@ public sealed class ShimTests : IClassFixture<ShimFixture>, IDisposable
     }
 
     [Fact]
+    public void No_config_for_this_account_passes_through()
+    {
+        // SYSTEM, a service or another user: tack must be invisible, not an error.
+        string node = _fx.ShimFor("node");
+        string pathDir = Directory.CreateDirectory(Path.Combine(_work, "onpath")).FullName;
+        File.WriteAllText(Path.Combine(pathDir, "node.cmd"), "@echo off\r\necho WHICH=passthrough\r\nexit /b 4\r\n");
+        var env = new Dictionary<string, string> { ["PATH"] = pathDir };
+
+        var r = Run(node, [], _work, MissingResolved(), env: env);
+
+        Assert.Equal(4, r.ExitCode);
+        Assert.Contains("WHICH=passthrough", r.Stdout);
+    }
+
+    [Fact]
+    public void No_config_and_nothing_on_path_says_why()
+    {
+        string node = _fx.ShimFor("node");
+        string empty = Directory.CreateDirectory(Path.Combine(_work, "empty")).FullName;
+        var env = new Dictionary<string, string> { ["PATH"] = empty };
+
+        var r = Run(node, [], _work, MissingResolved(), env: env);
+
+        Assert.Equal(127, r.ExitCode);
+        Assert.Contains("isn't set up for this account", r.Stderr);
+    }
+
+    [Fact]
+    public void Config_beside_or_above_the_shims_folder_is_ignored()
+    {
+        // Every account runs the same shims, so a resolved.json next to them (or in the folder above, where the
+        // per-user install used to keep it) would be someone else's config. Only the caller's own counts.
+        string binDir = CmdInstall("node", "@echo off\r\necho WHICH=registered\r\n");
+        string foreign = JsonSerializer.Serialize(
+            ConfigCompiler.Compile(NodeConfig(("1.0.0", binDir), defaultVersion: "1.0.0")), TackJson.Default.ResolvedConfig);
+        string root = Path.Combine(_work, "Tack");
+        string node = _fx.ShimIn(Path.Combine(root, "shims"), "node");
+        File.WriteAllText(Path.Combine(root, "shims", "resolved.json"), foreign);
+        File.WriteAllText(Path.Combine(root, "resolved.json"), foreign);
+
+        string pathDir = Directory.CreateDirectory(Path.Combine(_work, "onpath")).FullName;
+        File.WriteAllText(Path.Combine(pathDir, "node.cmd"), "@echo off\r\necho WHICH=passthrough\r\n");
+        var env = new Dictionary<string, string> { ["PATH"] = pathDir };
+
+        var r = Run(node, [], _work, MissingResolved(), env: env);
+
+        Assert.Contains("WHICH=passthrough", r.Stdout);
+        Assert.DoesNotContain("WHICH=registered", r.Stdout);
+    }
+
+    [Fact]
+    public void Corrupt_config_fails_loudly()
+    {
+        // Unlike a missing config, a broken one is the caller's own, and passing through would hide it.
+        string resolved = Path.Combine(_work, "resolved.json");
+        File.WriteAllText(resolved, "{ not json");
+        string node = _fx.ShimFor("node");
+
+        var r = Run(node, [], _work, resolved);
+
+        Assert.Equal(127, r.ExitCode);
+        Assert.Contains("could not read", r.Stderr);
+    }
+
+    [Fact]
     public void Version_not_installed_fails_loudly()
     {
         string binDir = CmdInstall("node", "@echo off\r\n");
@@ -316,6 +381,10 @@ public sealed class ShimTests : IClassFixture<ShimFixture>, IDisposable
         return path;
     }
 
+    // A TACK_RESOLVED that names no file: the shim then has no config, and never falls back to the real
+    // %LOCALAPPDATA% one, so these tests can't pick up the machine's own tack setup.
+    private string MissingResolved() => Path.Combine(_work, "no-such-resolved.json");
+
     private string CmdInstall(string exposedName, string cmdBody, string? folder = null)
     {
         string dir = Directory.CreateTempSubdirectory("tack-bin-").FullName;
@@ -370,11 +439,7 @@ public sealed class ShimFixture : IDisposable
     {
         _bin = AppContext.BaseDirectory;
         _shimDir = Directory.CreateTempSubdirectory("tack-shim-fixture-").FullName;
-
-        // The renamed shim host loads tack-shim.dll AND Tack.Core.dll from its own dir, so copy both sets.
-        foreach (var pattern in new[] { "tack-shim.*", "Tack.Core.*" })
-            foreach (var f in Directory.GetFiles(_bin, pattern))
-                File.Copy(f, Path.Combine(_shimDir, Path.GetFileName(f)), overwrite: true);
+        CopyShimHost(_shimDir);
 
         if (!File.Exists(Path.Combine(_shimDir, "tack-shim.exe")))
             throw new FileNotFoundException("tack-shim.exe not found in test output; build the solution first");
@@ -388,6 +453,24 @@ public sealed class ShimFixture : IDisposable
         string dest = Path.Combine(_shimDir, tool + ".exe");
         if (!File.Exists(dest)) File.Copy(Path.Combine(_shimDir, "tack-shim.exe"), dest);
         return dest;
+    }
+
+    // The same, in a shims dir of the caller's choosing, for tests that care where the shim lives.
+    public string ShimIn(string shimsDir, string tool)
+    {
+        Directory.CreateDirectory(shimsDir);
+        CopyShimHost(shimsDir);
+        string dest = Path.Combine(shimsDir, tool + ".exe");
+        File.Copy(Path.Combine(shimsDir, "tack-shim.exe"), dest, overwrite: true);
+        return dest;
+    }
+
+    // The renamed shim host loads tack-shim.dll AND Tack.Core.dll from its own dir, so copy both sets.
+    private void CopyShimHost(string dir)
+    {
+        foreach (var pattern in new[] { "tack-shim.*", "Tack.Core.*" })
+            foreach (var f in Directory.GetFiles(_bin, pattern))
+                File.Copy(f, Path.Combine(dir, Path.GetFileName(f)), overwrite: true);
     }
 
     // A temp binDir whose <exposedName>.exe is the stub tool (a real PE exe), so we can test native dispatch.

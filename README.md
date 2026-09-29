@@ -289,6 +289,11 @@ and `tack enable` to take them back.
 Useful switches for debugging the shim:
 
 - `TACK_SHIM_DEBUG=1` makes the shim trace its decisions to stderr.
-- `TACK_RESOLVED=<path>` points the shim at a specific `resolved.json`.
+- `TACK_RESOLVED=<path>` points the shim at a specific `resolved.json`. If that file doesn't exist, the shim
+  treats it as no config and passes straight through.
+
+Without `TACK_RESOLVED`, a shim reads only the `resolved.json` in the calling account's own `%LocalAppData%`. It
+picks `tack` or `tack (Dev)` from the name of the folder its shims folder is in (not from `TACK_DEV`). An account
+with no config, such as SYSTEM, a service or another user, just gets passthrough.
 
 [`tools/bench-shim.ps1`](tools/bench-shim.ps1) measures the shim's start-up overhead against a stub tool.

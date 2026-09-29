@@ -17,7 +17,8 @@ using Tack.Core.Resolution;
 // made it - to the invocation log.
 //
 // All resolution logic lives in Tack.Core (the resolver, zone paths, version match, mini tack.yml parser). The
-// shim is a thin front-end: filename -> Resolver -> locate -> exec. It reads only the compiled resolved.json.
+// shim is a thin front-end: filename -> Resolver -> locate -> exec. It reads only the calling account's compiled
+// resolved.json, and an account without one (SYSTEM, a service, another user) just gets passthrough.
 
 try
 {
@@ -26,10 +27,20 @@ try
     string exposed = Path.GetFileNameWithoutExtension(self);
     Debug($"exposed='{exposed}' self='{self}'");
 
-    // 2. Load the pre-compiled resolved.json (source-gen, AOT-safe).
+    // 2. Load this account's pre-compiled resolved.json (source-gen, AOT-safe). No config at all means tack isn't
+    //    set up for this account, so it stays invisible: straight passthrough, no logging, no settings.
     string? resolvedPath = FindResolved();
     if (resolvedPath is null)
-        return Fail("no resolved.json found (set TACK_RESOLVED, or place it beside the shim / in %LOCALAPPDATA%\\tack)");
+    {
+        Debug("no resolved.json for this account -> passthrough");
+        var (fallback, _) = Passthrough(exposed);
+        if (fallback is null)
+            return Fail($"'{exposed}' was not found on PATH (tack isn't set up for this account, so it passes calls through)");
+        var (start, startError) = StartInfo(fallback, args, env: null);
+        if (start is null) return Fail(startError!);
+        Native.IgnoreConsoleInterrupts();
+        return Exec(start);
+    }
 
     ResolvedConfig? config;
     try
@@ -209,24 +220,23 @@ static int Exec(ProcessStartInfo psi)
 
 // ---- config discovery ---------------------------------------------------------------------------
 
+// Only ever the calling account's own config. TACK_RESOLVED wins when set (the test hook: anything that can set our
+// environment can already set PATH), and a missing file there means no config rather than a fallback. Otherwise it's
+// resolved.json in the token user's own %LOCALAPPDATA%, for the profile named by the shims folder's parent (see
+// TackProfile.ForShimsDir). Never a file beside the shim or above the shims folder: every account runs these shims,
+// so a config found there would belong to someone else. Null means this account has no config.
 static string? FindResolved()
 {
-    if (Environment.GetEnvironmentVariable("TACK_RESOLVED") is { Length: > 0 } env && File.Exists(env))
-        return env;
+    if (Environment.GetEnvironmentVariable("TACK_RESOLVED") is { Length: > 0 } env)
+        return File.Exists(env) ? env : null;
 
-    string beside = Path.Combine(AppContext.BaseDirectory, "resolved.json");
-    if (File.Exists(beside)) return beside;
+    // The known-folder API reads the process token's profile, not the %LOCALAPPDATA% variable. An account with no
+    // profile gets "", and that must never turn into a path relative to the working directory.
+    string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    if (!Path.IsPathFullyQualified(local)) return null;
 
-    // The data dir the shim was stamped into: <root>\shims\node.exe -> <root>\resolved.json. This ties a shim to
-    // ITS profile (tack vs tack (Dev)) by where it lives, not by how it was compiled - so a dev instance's shims
-    // read the dev config even when the shim binary itself is a Release build.
-    if (Directory.GetParent(AppContext.BaseDirectory.TrimEnd('\\', '/')) is { } root)
-    {
-        string owner = Path.Combine(root.FullName, "resolved.json");
-        if (File.Exists(owner)) return owner;
-    }
-
-    return File.Exists(TackPaths.ResolvedJson) ? TackPaths.ResolvedJson : null;
+    string path = Path.Combine(local, TackProfile.ForShimsDir(AppContext.BaseDirectory), "resolved.json");
+    return File.Exists(path) ? path : null;
 }
 
 // ---- misc ---------------------------------------------------------------------------------------

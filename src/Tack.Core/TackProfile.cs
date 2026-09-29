@@ -17,8 +17,26 @@ public static class TackProfile
     /// <summary>True when running as an isolated development instance (see the type remarks).</summary>
     public static bool IsDev { get; } = ComputeIsDev();
 
+    /// <summary>The release profile's %LOCALAPPDATA% subfolder.</summary>
+    public const string ReleaseDataFolder = "tack";
+
+    /// <summary>The dev profile's %LOCALAPPDATA% subfolder.</summary>
+    public const string DevDataFolder = "tack (Dev)";
+
     /// <summary>The %LOCALAPPDATA% subfolder for this profile - <c>tack</c> or <c>tack (Dev)</c>.</summary>
-    public static string DataFolderName => IsDev ? "tack (Dev)" : "tack";
+    public static string DataFolderName => IsDev ? DevDataFolder : ReleaseDataFolder;
+
+    /// <summary>
+    /// The data folder a shim living in <paramref name="shimsDir"/> belongs to: <see cref="DevDataFolder"/> when the
+    /// shims folder sits in one named <c>Tack (Dev)</c> (any case), else <see cref="ReleaseDataFolder"/>. The shim
+    /// uses this instead of <see cref="IsDev"/>: its folder is admin-owned, so the caller can't switch its profile the
+    /// way <c>TACK_DEV</c> could, and a Release-built shim stamped into the dev folder still reads the dev config.
+    /// </summary>
+    public static string ForShimsDir(string shimsDir)
+    {
+        string? owner = Path.GetFileName(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(shimsDir)));
+        return string.Equals(owner, "Tack (Dev)", StringComparison.OrdinalIgnoreCase) ? DevDataFolder : ReleaseDataFolder;
+    }
 
     /// <summary>Suffix for user-facing labels (window title, doctor) - <c>""</c> or <c>" (Dev)"</c>.</summary>
     public static string DisplaySuffix => IsDev ? " (Dev)" : "";
