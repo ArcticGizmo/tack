@@ -6,6 +6,8 @@
 publish/
 releases/
 
+spikes/m9-msi/msi/
+
 # IDE / editor / user files
 .vs/
 .idea/

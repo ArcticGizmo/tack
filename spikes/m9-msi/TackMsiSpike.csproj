@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Throwaway spike for the option-B redesign (docs/adversarial-review.md #1): does a per-machine Velopack MSI
+    (Program Files) give tack what it needs? Each Velopack hook records who it ran as, whether it was elevated,
+    and whether it could write the install dir and open the system PATH key for write - without changing either.
+    See README.md for the install / update / uninstall runbook.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <AssemblyName>tack-msi-spike</AssemblyName>
+    <RootNamespace>TackMsiSpike</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Same version tack pins, so the answers apply to tack as it ships today. -->
+    <PackageReference Include="Velopack" Version="1.2.0" />
+  </ItemGroup>
+</Project>

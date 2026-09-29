@@ -100,6 +100,36 @@ Writing only the system PATH is fine. The problem is putting a folder the user c
 - **Make the shim load only the caller's config (do this as well).** Load only `TackPaths.ResolvedJson`, which is computed from the calling account, and never the file next to or above the shim. Pass straight through without reading any config when running as SYSTEM or LocalService, or when the config file's owner isn't the calling user. This closes (b) and (d) but not (a).
 - **Store the entry as `%USERPROFILE%\AppData\Local\tack\shims` (not verified).** Because the PATH value is stored unexpanded, each account might expand it to its own folder. It's not certain that this expands at boot for services. If it doesn't, the entry becomes a relative path, which is its own hazard. Test it before relying on it. It also doesn't help (c).
 
+#### Decision (2026-09-29): option B
+
+The two options considered were:
+
+- **A. Fully admin:** config in an admin-only location, and every `tool add`, `zone add` and `log on` asks for UAC. Rejected: every account would share one user's registrations, including binaries in that user's profile, so SYSTEM would still end up running user-writable binaries.
+- **B. Admin-installed binaries and shims, per-user config:** chosen.
+
+Under B:
+
+- tack is installed per-machine (Velopack MSI, `--instLocation PerMachine`) into Program Files, and the shims folder is admin-owned. The installer runs elevated, so it writes the system PATH itself. That removes the first-run UAC prompt, `TACK_SKIP_FIRSTRUN`, the setup mutex and `install.ps1`'s separate `tack setup` step.
+- Config stays per-user. The shim reads **only** the token user's `TackPaths.ResolvedJson` (`Environment.GetFolderPath` resolves the folder from the process token, not from the `%LOCALAPPDATA%` variable). The `TACK_RESOLVED`, next-to-the-shim and folder-above-the-shims-folder lookups are removed.
+- **Who the shim runs as decides whose config it reads:**
+
+  | Caller | Runs as | Config read |
+  |---|---|---|
+  | Admin user accepting the UAC prompt | the same user | theirs, so pinned versions keep working |
+  | Standard user with admin credentials typed at the prompt | the admin account | the admin's own, usually none, so tack passes through |
+  | SYSTEM, services, other users | themselves | their own, usually none, so tack passes through |
+
+- **Elevated shells behave like normal ones.** Running as the same account, they read that account's config. Passing through when elevated was rejected because admin shells behaving differently would be surprising. It also isn't a new hole: same-account elevation already trusts files the user can write, such as the PowerShell `$PROFILE`, Python's per-user site-packages, `~/.npmrc` and user environment variables. Microsoft doesn't treat same-account elevation as a security boundary.
+- UAC is needed only for install, uninstall, update, and when the set of shim names changes. New versions, zones and settings don't need it.
+- Existing machines need migrating: the installer must remove the old `%LOCALAPPDATA%\tack\shims`, `tack (Dev)\shims` and `Tack\current` entries from the system PATH.
+
+Open questions for the first spike:
+
+- whether updates ask for UAC on a Program Files install,
+- whether install and uninstall hooks run elevated under the MSI,
+- whether the pinned Velopack version supports `--msi`,
+- where the dev profile's shims should live.
+
 **Separate gap:** nothing can take the **dev** entry off the system PATH. Only the uninstall hook calls `Unregister` (`src/Tack.Cli/InstallHook.cs:94`), and it only removes the release profile's folder. After `run.bat doctor --fix`, `tack (Dev)\shims` stays on the system PATH for good. Add a way to remove it, for example `tack doctor --unwire`.
 
 ---
