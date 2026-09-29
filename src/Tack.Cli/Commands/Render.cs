@@ -27,6 +27,15 @@ internal static class Render
         _ => "[grey]-[/]",
     };
 
+    /// <summary>A version's variables as display lines, sorted by name: <c>NAME=value</c> as stored (unexpanded),
+    /// or <c>NAME (unset)</c> for an empty value.</summary>
+    public static List<string> EnvLines(IReadOnlyDictionary<string, string>? env) =>
+        env is null
+            ? new List<string>()
+            : env.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+                 .Select(kv => kv.Value.Length == 0 ? $"{kv.Key} (unset)" : $"{kv.Key}={kv.Value}")
+                 .ToList();
+
     public static bool OnPath(string dir)
     {
         string target = Norm(dir);

@@ -40,6 +40,10 @@ public sealed class InstalledVersion
 
     /// <summary>Executable names this version provides (e.g. node exposes node, npm, npx, corepack).</summary>
     public List<string> Exposes { get; set; } = new();
+
+    /// <summary>Environment variables set for this version's process (see <see cref="VersionEnv"/>). Null when
+    /// there are none, so a plain version never writes the key.</summary>
+    public Dictionary<string, string>? Env { get; set; }
 }
 
 /// <summary>A central rule: <see cref="Path"/> and every directory under it resolves <see cref="Tool"/> to

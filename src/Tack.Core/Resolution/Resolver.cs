@@ -32,6 +32,9 @@ public sealed class Resolution
     public string? BinDir { get; init; }
     public string? Detail { get; init; }
 
+    /// <summary>The selected version's environment variables (unexpanded; see <see cref="VersionEnv"/>), or null.</summary>
+    public IReadOnlyDictionary<string, string>? Env { get; init; }
+
     /// <summary>True when a concrete, installed version was selected.</summary>
     public bool Resolved => Source is ResolutionSource.EnvOverride or ResolutionSource.EnforcedZone
         or ResolutionSource.TackYml or ResolutionSource.Zone or ResolutionSource.Default;
@@ -150,6 +153,7 @@ public sealed class Resolver
             Source = source,
             Version = match,
             BinDir = rt.Versions[match].BinDir,
+            Env = rt.Versions[match].Env,
             Detail = detail,
         };
     }

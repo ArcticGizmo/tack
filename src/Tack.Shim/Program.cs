@@ -60,7 +60,7 @@ try
     // Install the Ctrl-C handler once, before any child is spawned.
     Native.IgnoreConsoleInterrupts();
 
-    return target is null ? Fail(error!) : Exec(target, args);
+    return target is null ? Fail(error!) : Exec(target, args, res.Env);
 }
 catch (Exception ex)
 {
@@ -138,6 +138,10 @@ static void LogInvocation(string logPath, string exposed, string[] forwarded, Re
             Detail = res.Detail,
             Target = target,
             Error = error,
+            // Names only: a value could be a token, and logs get pasted into issues.
+            Env = target is null || res.Env is null
+                ? Array.Empty<string>()
+                : res.Env.Select(kv => kv.Value.Length == 0 ? $"{kv.Key} (unset)" : kv.Key).ToList(),
             Callers = callers,
             CallersEnd = end,
         };
@@ -153,8 +157,9 @@ static void LogInvocation(string logPath, string exposed, string[] forwarded, Re
 // ---- exec proxy ---------------------------------------------------------------------------------
 
 // Spawn the target as a child, inheriting our console + std handles, and return ITS exit code. A .cmd/.bat
-// is not a PE image, so CreateProcess (UseShellExecute=false) rejects it; those go through cmd.exe /c.
-static int Exec(string target, string[] forwarded)
+// is not a PE image, so CreateProcess (UseShellExecute=false) rejects it; those go through cmd.exe /c. The
+// resolved version's own variables (if any) are layered over our environment, %VARS% expanded against it.
+static int Exec(string target, string[] forwarded, IReadOnlyDictionary<string, string>? env)
 {
     string ext = Path.GetExtension(target);
     bool viaCmd = ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase)
@@ -171,6 +176,11 @@ static int Exec(string target, string[] forwarded)
         psi.ArgumentList.Add(target);
     }
     foreach (var a in forwarded) psi.ArgumentList.Add(a);
+    if (env is { Count: > 0 })
+    {
+        Debug($"env: {string.Join(", ", env.Keys)}");
+        VersionEnv.ApplyTo(psi.Environment, env, Environment.ExpandEnvironmentVariables);
+    }
 
     using var child = Process.Start(psi);
     if (child is null) return Fail("failed to start target process");

@@ -82,6 +82,66 @@ public sealed class ShimTests : IClassFixture<ShimFixture>, IDisposable
     }
 
     [Fact]
+    public void Version_env_is_set_expanded_and_unset_for_the_child()
+    {
+        string binDir = CmdInstall("node",
+            "@echo off\r\necho CFG=[%TACK_TEST_CFG%]\r\necho GONE=[%TACK_TEST_GONE%]\r\necho KEPT=[%TACK_TEST_KEPT%]\r\n");
+        var central = NodeConfig(("1.0.0", binDir), defaultVersion: "1.0.0");
+        central.Tools["node"].Versions["1.0.0"].Env = new()
+        {
+            ["TACK_TEST_CFG"] = @"%TACK_TEST_BASE%\cfg",
+            ["TACK_TEST_GONE"] = "",
+        };
+        string resolved = WriteResolved(central);
+        string node = _fx.ShimFor("node");
+
+        var env = new Dictionary<string, string>
+        {
+            ["TACK_TEST_BASE"] = @"C:\base",
+            ["TACK_TEST_GONE"] = "was-here",
+            ["TACK_TEST_KEPT"] = "untouched",
+        };
+        var r = Run(node, [], _work, resolved, env: env);
+
+        Assert.Equal(0, r.ExitCode);
+        Assert.Contains(@"CFG=[C:\base\cfg]", r.Stdout);
+        Assert.Contains("GONE=[]", r.Stdout); // a batch file expands an undefined variable to nothing
+        Assert.Contains("KEPT=[untouched]", r.Stdout);
+    }
+
+    [Fact]
+    public void Version_env_only_applies_to_the_version_that_sets_it()
+    {
+        string binDir = CmdInstall("node", "@echo off\r\necho CFG=[%TACK_TEST_CFG%]\r\n");
+        var central = NodeConfig(("plain", binDir), ("work", binDir), defaultVersion: "plain");
+        central.Tools["node"].Versions["work"].Env = new() { ["TACK_TEST_CFG"] = "work-cfg" };
+        string resolved = WriteResolved(central);
+        string node = _fx.ShimFor("node");
+
+        Assert.Contains("CFG=[]", Run(node, [], _work, resolved).Stdout);
+        var pick = new Dictionary<string, string> { ["TACK_NODE_VERSION"] = "work" };
+        Assert.Contains("CFG=[work-cfg]", Run(node, [], _work, resolved, env: pick).Stdout);
+    }
+
+    [Fact]
+    public void Log_records_env_names_but_never_values()
+    {
+        string binDir = _fx.FakeNativeInstall("node");
+        var central = NodeConfig(("1.0.0", binDir), defaultVersion: "1.0.0");
+        central.Tools["node"].Versions["1.0.0"].Env = new() { ["TACK_TEST_SECRET"] = "hunter2", ["TACK_TEST_GONE"] = "" };
+        central.Settings.Log = true;
+        string resolved = WriteResolved(central);
+        string node = _fx.ShimFor("node");
+
+        Assert.Equal(0, Run(node, ["--stub-exit=0"], _work, resolved).ExitCode);
+
+        string log = File.ReadAllText(Path.Combine(_work, "logs", "shim.log"));
+        Assert.Contains("TACK_TEST_SECRET", log);
+        Assert.Contains("TACK_TEST_GONE (unset)", log);
+        Assert.DoesNotContain("hunter2", log);
+    }
+
+    [Fact]
     public void Forwards_stdin_to_child()
     {
         string binDir = _fx.FakeNativeInstall("node");

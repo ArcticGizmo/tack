@@ -205,6 +205,19 @@ public class CompilerTests
         Assert.DoesNotContain("\"allTools\": false", json);
     }
 
+    [Fact]
+    public void A_versions_env_is_carried_into_resolved_json_and_left_out_when_empty()
+    {
+        var central = Sample();
+        central.Tools["node"].Versions["20.11.0"].Env = new() { ["NODE_OPTIONS"] = "--max-old-space-size=4096" };
+        var rc = ConfigCompiler.Compile(central);
+
+        Assert.Equal("--max-old-space-size=4096", rc.Tools["node"].Versions["20.11.0"].Env!["node_options"]);
+        Assert.Null(rc.Tools["node"].Versions["18.19.0"].Env);
+        string json = System.Text.Json.JsonSerializer.Serialize(rc, TackJson.Default.ResolvedConfig);
+        Assert.Equal(1, json.Split("\"env\"").Length - 1); // only the version that has one writes the key
+    }
+
     internal static CentralConfig Sample()
     {
         return new CentralConfig
@@ -228,6 +241,60 @@ public class CompilerTests
                 new Zone { Path = @"C:\corp", Tool = "node", Version = "18.19.0", Enforce = true },
             },
         };
+    }
+}
+
+public class VersionEnvTests
+{
+    [Theory]
+    [InlineData("CLAUDE_CONFIG_DIR=C:\\cfg", "CLAUDE_CONFIG_DIR", "C:\\cfg")]
+    [InlineData("NODE_OPTIONS=--foo=bar", "NODE_OPTIONS", "--foo=bar")] // only the first = splits
+    [InlineData("FOO=", "FOO", "")]                                     // empty value = unset
+    [InlineData("P=%USERPROFILE%\\x", "P", "%USERPROFILE%\\x")]          // kept unexpanded
+    public void Parses_name_value(string spec, string name, string value)
+    {
+        Assert.True(VersionEnv.TryParse(spec, out var n, out var v, out var error), error);
+        Assert.Equal(name, n);
+        Assert.Equal(value, v);
+    }
+
+    [Theory]
+    [InlineData("FOO")]
+    [InlineData("=bar")]
+    [InlineData("MY VAR=1")]
+    public void Rejects_what_isnt_name_value(string spec)
+        => Assert.False(VersionEnv.TryParse(spec, out _, out _, out _));
+
+    [Fact]
+    public void Parse_is_null_for_none_and_last_duplicate_wins()
+    {
+        Assert.Null(VersionEnv.Parse(null, out _));
+        Assert.Null(VersionEnv.Parse(Array.Empty<string>(), out _));
+
+        var env = VersionEnv.Parse(new[] { "A=1", "a=2", "B=3" }, out var error);
+        Assert.Null(error);
+        Assert.Equal(2, env!.Count);
+        Assert.Equal("2", env["A"]);
+    }
+
+    [Fact]
+    public void Parse_reports_the_first_bad_entry()
+    {
+        Assert.Null(VersionEnv.Parse(new[] { "A=1", "oops" }, out var error));
+        Assert.Contains("oops", error);
+    }
+
+    [Fact]
+    public void ApplyTo_sets_expanded_values_and_removes_empty_ones()
+    {
+        var target = new Dictionary<string, string?> { ["KEEP"] = "k", ["DROP"] = "d" };
+        var env = new Dictionary<string, string> { ["NEW"] = "%X%", ["DROP"] = "" };
+
+        VersionEnv.ApplyTo(target, env, v => v.Replace("%X%", "expanded"));
+
+        Assert.Equal("expanded", target["NEW"]);
+        Assert.Equal("k", target["KEEP"]);
+        Assert.False(target.ContainsKey("DROP"));
     }
 }
 
@@ -284,6 +351,41 @@ public class ResolverTests
         Assert.Equal(ResolutionSource.Zone, r.Source);
         Assert.Equal("18.19.0", r.Version); // "18" prefix -> 18.19.0
         Assert.Equal(@"zone C:\work", r.Detail);
+    }
+
+    [Fact]
+    public void A_named_version_carries_its_env_and_other_versions_dont()
+    {
+        // The CLAUDE_CONFIG_DIR case: the same install registered twice, one name setting a variable.
+        var central = new CentralConfig
+        {
+            Tools =
+            {
+                ["claude"] = new RegisteredTool
+                {
+                    Versions =
+                    {
+                        ["stock"] = new InstalledVersion { BinDir = @"C:\bin", Exposes = { "claude" } },
+                        ["work"] = new InstalledVersion
+                        {
+                            BinDir = @"C:\bin", Exposes = { "claude" },
+                            Env = new() { ["CLAUDE_CONFIG_DIR"] = @"%USERPROFILE%\.claude-work" },
+                        },
+                    },
+                },
+            },
+            Defaults = { ["claude"] = "stock" },
+            Zones = { new Zone { Path = @"C:\work", Tool = "claude", Version = "work" } },
+        };
+        var resolver = new Resolver(ConfigCompiler.Compile(central));
+
+        var inZone = resolver.Resolve("claude", @"C:\work\repo", Ctx());
+        Assert.Equal("work", inZone.Version);
+        Assert.Equal(@"%USERPROFILE%\.claude-work", inZone.Env!["CLAUDE_CONFIG_DIR"]); // expanded by the shim, not here
+
+        var outside = resolver.Resolve("claude", @"C:\elsewhere", Ctx());
+        Assert.Equal("stock", outside.Version);
+        Assert.Null(outside.Env);
     }
 
     [Fact]

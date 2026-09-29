@@ -32,6 +32,9 @@ public sealed class ResolvedVersion
 {
     public string BinDir { get; set; } = "";
     public List<string> Exposes { get; set; } = new();
+
+    /// <summary>Variables the shim sets for this version's process; null when there are none.</summary>
+    public Dictionary<string, string>? Env { get; set; }
 }
 
 public sealed class ResolvedZone

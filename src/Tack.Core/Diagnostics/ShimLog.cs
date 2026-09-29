@@ -22,6 +22,9 @@ public sealed class ShimLogEntry
     public string? Target { get; init; }
     public string? Error { get; init; }
 
+    /// <summary>The names of the variables the version sets for the target (never their values).</summary>
+    public IReadOnlyList<string> Env { get; init; } = Array.Empty<string>();
+
     /// <summary>Parent first, then its parent, and so on.</summary>
     public IReadOnlyList<CallerProcess> Callers { get; init; } = Array.Empty<CallerProcess>();
 
@@ -58,6 +61,7 @@ public static class ShimLog
         Line(sb, "args", e.Args.Count == 0 ? "(none)" : string.Join(' ', e.Args.Select(Quote)));
         Line(sb, "cwd", e.Cwd);
         if (e.Target is not null) Line(sb, "runs", e.Target);
+        if (e.Env.Count > 0) Line(sb, "env", string.Join(", ", e.Env));
         if (e.Error is not null) Line(sb, "error", e.Error);
 
         if (e.Callers.Count == 0)

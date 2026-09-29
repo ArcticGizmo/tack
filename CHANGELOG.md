@@ -9,6 +9,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.1.7] - 2026-09-29
+
+- `tool add --env NAME=VALUE` gives a version its own variables
+- So `claude@work` stops logging into your personal account
+- The log keeps variable names and politely forgets the values
+
+---
+
 ## [v0.1.6] - 2026-09-25
 
 - `tack log on` records every shim call and who made it

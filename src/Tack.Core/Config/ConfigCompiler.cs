@@ -22,7 +22,12 @@ public static class ConfigCompiler
             };
             foreach (var (version, iv) in tool.Versions)
             {
-                rt.Versions[version] = new ResolvedVersion { BinDir = iv.BinDir, Exposes = new List<string>(iv.Exposes) };
+                rt.Versions[version] = new ResolvedVersion
+                {
+                    BinDir = iv.BinDir,
+                    Exposes = new List<string>(iv.Exposes),
+                    Env = iv.Env is { Count: > 0 } env ? new Dictionary<string, string>(env, StringComparer.OrdinalIgnoreCase) : null,
+                };
                 foreach (var exposed in iv.Exposes) rc.Index[exposed] = toolName;
             }
             rc.Index[toolName] = toolName; // a tool's own name always resolves to itself

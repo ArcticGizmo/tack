@@ -31,6 +31,10 @@ public sealed class ToolsAddSettings : CommandSettings
     [Description("Comma-separated binary names; auto-detected from the binDir if omitted.")]
     public string? Exposes { get; init; }
 
+    [CommandOption("--env <NAME=VALUE>")]
+    [Description("An environment variable this version's commands run with; repeat for more. %VARS% expand at call time, and NAME= unsets it.")]
+    public string[]? Env { get; init; }
+
     public override ValidationResult Validate()
     {
         var s = ToolSpec.Parse(Spec);
@@ -38,6 +42,9 @@ public sealed class ToolsAddSettings : CommandSettings
             return ValidationResult.Error("Specify tool@version, e.g. node@20.11.0");
         if (!string.IsNullOrWhiteSpace(PositionalBinDir) && !string.IsNullOrWhiteSpace(PathOption))
             return ValidationResult.Error("Give the binDir once - either as the second argument or with --path, not both.");
+        VersionEnv.Parse(Env, out var envError);
+        if (envError is not null)
+            return ValidationResult.Error($"--env: {envError}");
         return ValidationResult.Success();
     }
 }
@@ -80,13 +87,16 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
             tool = new RegisteredTool();
             config.Tools[spec.Tool] = tool;
         }
-        tool.Versions[spec.Version!] = new InstalledVersion { BinDir = binDir, Exposes = exposes };
+        var versionEnv = VersionEnv.Parse(settings.Env, out _); // already validated
+        tool.Versions[spec.Version!] = new InstalledVersion { BinDir = binDir, Exposes = exposes, Env = versionEnv };
         if (!config.Defaults.ContainsKey(spec.Tool))
             config.Defaults[spec.Tool] = spec.Version!;
 
         env.Save(config);
         AnsiConsole.MarkupLine($"[green]added[/] {Markup.Escape(spec.Tool)}@{Markup.Escape(spec.Version!)} -> {Markup.Escape(binDir)}");
         AnsiConsole.MarkupLine($"[grey]exposes:[/] {Markup.Escape(string.Join(", ", exposes))}");
+        foreach (var line in Render.EnvLines(versionEnv))
+            AnsiConsole.MarkupLine($"[grey]env:[/] {Markup.Escape(line)}");
         Mutations.ReportReshim(env.Reshim(config));
         if (env.IsDisabled)
             AnsiConsole.MarkupLine("[yellow]note:[/] tack is disabled - this is configured but won't take effect until [green]tack enable[/].");
@@ -178,6 +188,7 @@ public sealed class ToolsListCommand : Command<ToolsListSettings>
                 rows.Add(new Row(name, version, installed.BinDir,
                     // The command names tack intercepts for this version.
                     string.Join(", ", installed.Exposes.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)),
+                    Render.EnvLines(installed.Env),
                     IsDefault: string.Equals(version, def, StringComparison.OrdinalIgnoreCase),
                     IsHere: string.Equals(version, here, StringComparison.OrdinalIgnoreCase),
                     Missing: !Directory.Exists(installed.BinDir)));
@@ -191,18 +202,21 @@ public sealed class ToolsListCommand : Command<ToolsListSettings>
         return 0;
     }
 
-    private sealed record Row(string Tool, string Version, string BinDir, string Commands,
+    private sealed record Row(string Tool, string Version, string BinDir, string Commands, List<string> Env,
         bool IsDefault, bool IsHere, bool Missing);
 
     /// <summary>The compact view. The tool name is shown on its first row only; the version cell carries the
-    /// default / resolves-here markers. Long paths wrap inside their cell - <c>--expand</c> is for copying.</summary>
+    /// default / resolves-here markers. Long paths wrap inside their cell - <c>--expand</c> is for copying. The env
+    /// column only appears when some version sets a variable.</summary>
     private static void WriteTable(List<Row> rows)
     {
+        bool anyEnv = rows.Any(x => x.Env.Count > 0);
         var table = new Table().RoundedBorder();
         table.AddColumn("tool");
         table.AddColumn(new TableColumn("version").NoWrap());
         table.AddColumn("path");
         table.AddColumn("commands");
+        if (anyEnv) table.AddColumn("env");
         string? previous = null;
         foreach (var x in rows)
         {
@@ -212,8 +226,13 @@ public sealed class ToolsListCommand : Command<ToolsListSettings>
             string pathCell = x.Missing
                 ? $"[red]{Markup.Escape(x.BinDir)} (missing)[/]"
                 : Markup.Escape(x.BinDir);
-            table.AddRow(x.Tool == previous ? "" : Markup.Escape(x.Tool), versionCell, pathCell,
-                $"[grey]{Markup.Escape(x.Commands)}[/]");
+            var cells = new List<string>
+            {
+                x.Tool == previous ? "" : Markup.Escape(x.Tool), versionCell, pathCell,
+                $"[grey]{Markup.Escape(x.Commands)}[/]",
+            };
+            if (anyEnv) cells.Add(Markup.Escape(string.Join('\n', x.Env)));
+            table.AddRow(cells.ToArray());
             previous = x.Tool;
         }
         AnsiConsole.Write(table);
@@ -235,6 +254,8 @@ public sealed class ToolsListCommand : Command<ToolsListSettings>
                 + (x.Missing ? " [red]missing[/]" : ""));
             Console.WriteLine($"  path:     {x.BinDir}");
             Console.WriteLine($"  commands: {x.Commands}");
+            foreach (var line in x.Env)
+                Console.WriteLine($"  env:      {line}");
         }
     }
 }

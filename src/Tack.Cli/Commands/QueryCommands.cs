@@ -47,6 +47,19 @@ public sealed class InfoCommand : Command<InfoSettings>
                 string? target = BinaryLocator.Locate(r.BinDir, tool, File.Exists);
                 tree.AddNode($"binary: {Markup.Escape(target ?? $"(no '{tool}' in {r.BinDir})")}");
             }
+            if (r.Resolved && r.Env is { Count: > 0 })
+            {
+                // Expanded here the way the shim will, so the value shown is the value the tool gets.
+                var envNode = tree.AddNode("env:");
+                foreach (var (name, value) in r.Env.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    string expanded = Environment.ExpandEnvironmentVariables(value);
+                    envNode.AddNode(value.Length == 0
+                        ? $"{Markup.Escape(name)} [grey](unset)[/]"
+                        : $"{Markup.Escape(name)}={Markup.Escape(expanded)}"
+                          + (expanded == value ? "" : $" [grey]({Markup.Escape(value)})[/]"));
+                }
+            }
             AnsiConsole.Write(tree);
             return 0;
         }

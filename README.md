@@ -84,6 +84,22 @@ tack tool remove                                 # interactive multi-select
 
 Removing a version tidies up after itself: a tool left with nothing is dropped, a default pointing at the removed version moves to the highest one left, and any zone still pointing at it is flagged for you to fix.
 
+### Environment variables per version
+
+A version can carry environment variables, set for its commands only. A version name doesn't have to be a number, so the same install can be registered twice under different names:
+
+```powershell
+tack tool add claude@personal                    # the first one registered is the default
+tack tool add claude@work --env CLAUDE_CONFIG_DIR=%USERPROFILE%\.claude-work
+tack zone add C:\work claude@work                # every claude under C:\work uses the work account
+```
+
+Repeat `--env` for more than one. `%VARS%` are expanded when the command runs, not when you add it, and `NAME=` (no value) removes that variable for the command instead. Re-adding a version replaces its variables along with everything else, so give all of them again.
+
+The variables live only in your machine's config. A `tack.yml` can pick `claude: work` by name but can never set a variable itself, so cloning a repo can't slip something like `NODE_OPTIONS` into every command you run inside it.
+
+`tack info claude` lists the variables with their expanded values. `tack log` records the names but never the values, in case one is a token.
+
 ### Seeing what's going on
 
 - **`tack info`**: a table of every registered tool, the version it resolves to in the current directory, and why.
