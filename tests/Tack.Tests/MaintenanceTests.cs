@@ -113,6 +113,34 @@ public sealed class ReshimmerTests : IDisposable
     }
 
     [Fact]
+    public void An_unwritable_shims_dir_is_reported_and_resolved_json_still_written()
+    {
+        // An admin-owned shims dir refuses an unelevated write with access denied. A read-only shim gives the
+        // same exception without needing a second account.
+        string shims = Path.Combine(_root, "shims");
+        string resolved = Path.Combine(_root, "resolved.json");
+        var config = new CentralConfig
+        {
+            Tools = { ["node"] = new RegisteredTool { Versions = { ["1"] = new InstalledVersion { BinDir = _root, Exposes = { "node" } } } } },
+        };
+        Reshimmer.Run(config, shims, resolved, Payload());
+        string node = Path.Combine(shims, "node.exe");
+        File.SetAttributes(node, FileAttributes.ReadOnly);
+        try
+        {
+            config.Settings.Disabled = true;
+            var result = Reshimmer.Run(config, shims, resolved, Payload()); // a new payload, so node.exe needs rewriting
+
+            Assert.True(result.ShimsDirNeedsAdmin);
+            Assert.Contains("\"disabled\": true", File.ReadAllText(resolved));
+        }
+        finally
+        {
+            File.SetAttributes(node, FileAttributes.Normal);
+        }
+    }
+
+    [Fact]
     public void Prunes_shims_no_longer_exposed()
     {
         string shims = Path.Combine(_root, "shims");

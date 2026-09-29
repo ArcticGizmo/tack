@@ -27,25 +27,25 @@ public static class PathDoctor
         Func<EnvironmentVariableTarget, string?> getPath,
         Func<string, bool>? fileExists = null,
         Func<string, bool>? dirExists = null,
-        string? activeShimsDir = null,
-        bool disabled = false,
         IEnumerable<string>? tackShimsDirs = null)
     {
         // Shims dirs of any tack instance (both profiles). One of those ahead of us isn't a rogue install - it's
         // the release tack in front of a dev one - so it's reported as a hand-over hint, not per-tool shadowing.
-        var tackDirs = new HashSet<string>((tackShimsDirs ?? TackPaths.AllShimsDirs).Select(Norm));
+        var tackDirs = new HashSet<string>((tackShimsDirs ?? TackPaths.Machine.AllShimsDirs).Select(Norm));
         fileExists ??= File.Exists;
         dirExists ??= Directory.Exists;
-        // Where the shims actually live now (the parked dir while disabled); PATH/shadow checks still use the
-        // canonical shimsDir, since that's the entry wired onto PATH.
-        activeShimsDir ??= shimsDir;
 
         var report = new DoctorReport();
         string shims = Norm(shimsDir);
         var names = ExposedNames(config);
 
+        // `tack disable` is a per-user setting: the shims stay on PATH, so every other check still applies.
+        if (config.Settings.Disabled)
+            report.Add("tack is disabled", CheckStatus.Warn,
+                "your tool calls pass straight through; run 'tack enable' to turn it back on");
+
         report.Add("Shims directory exists",
-            dirExists(activeShimsDir) ? CheckStatus.Ok : CheckStatus.Warn, activeShimsDir);
+            dirExists(shimsDir) ? CheckStatus.Ok : CheckStatus.Warn, shimsDir);
 
         // Effective resolution order on Windows: machine PATH entries, then user PATH entries.
         var effective = Split(getPath(EnvironmentVariableTarget.Machine))
@@ -53,56 +53,48 @@ public static class PathDoctor
             .ToList();
         int shimsIndex = effective.FindIndex(p => Norm(p) == shims);
 
-        if (disabled)
-        {
-            // Interception is intentionally off (`tack disable`): the PATH entry points at the canonical dir
-            // that's renamed away. Report the state plainly instead of failing the on-PATH / shadow checks.
-            report.Add("tack is disabled", CheckStatus.Warn,
-                "interception off; run 'tack enable' to turn it back on");
-        }
-        else
-        {
-            report.Add("Shims directory is on PATH",
-                shimsIndex >= 0 ? CheckStatus.Ok : CheckStatus.Fail,
-                shimsIndex >= 0 ? WherePlaced(getPath, shims) : "not on PATH - tack won't intercept tool calls");
+        report.Add("Shims directory is on PATH",
+            shimsIndex >= 0 ? CheckStatus.Ok : CheckStatus.Fail,
+            shimsIndex >= 0 ? WherePlaced(getPath, shims) : "not on PATH - tack won't intercept tool calls");
 
-            // Shadowing: an earlier PATH dir that already provides a shimmed binary wins over the shim.
-            if (shimsIndex >= 0)
+        // Shadowing: an earlier PATH dir that already provides a shimmed binary wins over the shim.
+        if (shimsIndex >= 0)
+        {
+            var byOtherTack = new SortedDictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var name in names)
             {
-                var byOtherTack = new SortedDictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-                foreach (var name in names)
+                for (int i = 0; i < shimsIndex; i++)
                 {
-                    for (int i = 0; i < shimsIndex; i++)
+                    if (BinaryLocator.Locate(effective[i], name, fileExists) is not null)
                     {
-                        if (BinaryLocator.Locate(effective[i], name, fileExists) is not null)
+                        if (tackDirs.Contains(Norm(effective[i])))
                         {
-                            if (tackDirs.Contains(Norm(effective[i])))
-                            {
-                                if (!byOtherTack.TryGetValue(effective[i], out var list))
-                                    byOtherTack[effective[i]] = list = new List<string>();
-                                list.Add(name);
-                            }
-                            else
-                            {
-                                report.Add($"'{name}' is shadowed", CheckStatus.Warn,
-                                    $"{effective[i]} precedes the shims dir on PATH");
-                            }
-                            break;
+                            if (!byOtherTack.TryGetValue(effective[i], out var list))
+                                byOtherTack[effective[i]] = list = new List<string>();
+                            list.Add(name);
                         }
+                        else
+                        {
+                            report.Add($"'{name}' is shadowed", CheckStatus.Warn,
+                                $"{effective[i]} precedes the shims dir on PATH");
+                        }
+                        break;
                     }
                 }
-
-                foreach (var (dir, shared) in byOtherTack)
-                    report.Add("Behind another tack instance", CheckStatus.Warn,
-                        $"{dir} answers first for {string.Join(", ", shared.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}; " +
-                        "run 'tack disable' on that instance to hand them over");
             }
+
+            // That instance's shims are still there when it's disabled (it only passes calls through), so this
+            // can't tell whether the hand-over has already happened.
+            foreach (var (dir, shared) in byOtherTack)
+                report.Add("Behind another tack instance", CheckStatus.Warn,
+                    $"{dir} answers first for {string.Join(", ", shared.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))}; " +
+                    "run 'tack disable' on that instance to hand them over (fine to ignore if it's already disabled)");
         }
 
         // Stale shims.
-        if (dirExists(activeShimsDir))
+        if (dirExists(shimsDir))
         {
-            foreach (var exe in Directory.GetFiles(activeShimsDir, "*.exe"))
+            foreach (var exe in Directory.GetFiles(shimsDir, "*.exe"))
             {
                 string b = Path.GetFileNameWithoutExtension(exe);
                 if (!names.Contains(b))

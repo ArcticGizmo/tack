@@ -35,15 +35,15 @@ internal static class InstallHook
     /// <summary>On install/update: wire the system PATH if already elevated (never prompt here, never touch the
     /// user PATH), then (re)stamp shims from existing config with this build's shim binary. Shim stamping is
     /// best-effort - a copy locked by a running tool mid-update must not fail the install; `tack doctor`/`tack
-    /// reshim` recover any missed shims. Stamps into the ACTIVE shims dir, so an update while `tack disable`d
-    /// stays disabled. An update needs no PATH change: the install dir (...\current) is stable across versions.</summary>
+    /// reshim` recover any missed shims. An update needs no PATH change: the install dir (...\current) is stable
+    /// across versions.</summary>
     public static void Apply()
     {
         var env = new TackEnvironment();
         IPathInstaller? path = Elevation.IsAdministrator() ? new WindowsPathInstaller(shimsDir: env.ShimsDir) : null;
         try
         {
-            FirstRun.Apply(path, env.Load(), env.ActiveShimsDir, env.ResolvedJson, env.ShimPayload());
+            FirstRun.Apply(path, env.Load(), env.ShimsDir, env.ResolvedJson, env.ShimPayload());
         }
         catch
         {
@@ -83,8 +83,8 @@ internal static class InstallHook
     private const string SkipFirstRunVar = "TACK_SKIP_FIRSTRUN";
 
     /// <summary>On uninstall: strip tack's entries from the system PATH (one UAC prompt if not elevated, bounded
-    /// to stay inside Velopack's 30 s limit). The user PATH is never touched. User config + shims under
-    /// %LOCALAPPDATA%\tack are left in place, so a later reinstall keeps the registry/zones the user built up.</summary>
+    /// to stay inside Velopack's 30 s limit). The user PATH is never touched. User config under %LOCALAPPDATA%\tack
+    /// is left in place, so a later reinstall keeps the registry/zones the user built up.</summary>
     public static void Remove()
     {
         try

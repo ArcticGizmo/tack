@@ -3,9 +3,9 @@ namespace Tack.Core;
 /// <summary>
 /// Selects the app "profile" so a development instance can run without clobbering an installed release's
 /// data. Dev mode uses a separate data directory (<c>tack (Dev)</c> instead of <c>tack</c>) under
-/// %LOCALAPPDATA% - a separate config.json, resolved.json and shims dir - so a `dotnet run` / `run.bat`
-/// build never touches the config, shims or PATH wiring of a real installed tack. Ported from perch's
-/// AppProfile.
+/// %LOCALAPPDATA% and a separate install root (<c>Program Files\Tack (Dev)</c>, see <see cref="TackPaths"/>),
+/// so a `dotnet run` / `run.bat` build never touches the config, shims or PATH wiring of a real installed tack.
+/// Ported from perch's AppProfile.
 ///
 /// It's on automatically for <b>Debug</b> builds (so local dev is isolated with zero ceremony) and can be
 /// forced either way with the <c>TACK_DEV</c> environment variable: any non-empty value other than
@@ -35,7 +35,8 @@ public static class TackProfile
     public static string ForShimsDir(string shimsDir)
     {
         string? owner = Path.GetFileName(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(shimsDir)));
-        return string.Equals(owner, "Tack (Dev)", StringComparison.OrdinalIgnoreCase) ? DevDataFolder : ReleaseDataFolder;
+        return string.Equals(owner, TackPaths.Machine.DevInstallFolder, StringComparison.OrdinalIgnoreCase)
+            ? DevDataFolder : ReleaseDataFolder;
     }
 
     /// <summary>Suffix for user-facing labels (window title, doctor) - <c>""</c> or <c>" (Dev)"</c>.</summary>

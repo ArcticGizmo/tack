@@ -31,16 +31,7 @@ try
     //    set up for this account, so it stays invisible: straight passthrough, no logging, no settings.
     string? resolvedPath = FindResolved();
     if (resolvedPath is null)
-    {
-        Debug("no resolved.json for this account -> passthrough");
-        var (fallback, _) = Passthrough(exposed);
-        if (fallback is null)
-            return Fail($"'{exposed}' was not found on PATH (tack isn't set up for this account, so it passes calls through)");
-        var (start, startError) = StartInfo(fallback, args, env: null);
-        if (start is null) return Fail(startError!);
-        Native.IgnoreConsoleInterrupts();
-        return Exec(start);
-    }
+        return StraightThrough(exposed, args, "tack isn't set up for this account");
 
     ResolvedConfig? config;
     try
@@ -54,6 +45,10 @@ try
         return Fail($"could not read {resolvedPath}: {ex.Message}");
     }
     if (config is null) return Fail($"empty or invalid config: {resolvedPath}");
+
+    // `tack disable`: off for this account, exactly as if it had no config.
+    if (config.Settings.Disabled)
+        return StraightThrough(exposed, args, "tack is disabled");
 
     // 3. Resolve which version this binary is for THIS directory (Core owns the precedence).
     var resolver = new Resolver(config);
@@ -135,6 +130,20 @@ static (string? Target, string? Error) Passthrough(string exposed)
         }
     }
     return (null, $"'{exposed}' did not resolve for this directory and no fallback was found on PATH");
+}
+
+// tack is off for this caller (no config, or disabled): run the next match on PATH without resolving, logging or
+// consulting any setting. `why` only shows up if there's nothing on PATH to run.
+static int StraightThrough(string exposed, string[] forwarded, string why)
+{
+    Debug($"{why} -> passthrough");
+    var (fallback, _) = Passthrough(exposed);
+    if (fallback is null)
+        return Fail($"'{exposed}' was not found on PATH ({why}, so it passes calls through)");
+    var (psi, error) = StartInfo(fallback, forwarded, env: null);
+    if (psi is null) return Fail(error!);
+    Native.IgnoreConsoleInterrupts();
+    return Exec(psi);
 }
 
 // ---- invocation log -----------------------------------------------------------------------------

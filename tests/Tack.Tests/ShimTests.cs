@@ -275,6 +275,30 @@ public sealed class ShimTests : IClassFixture<ShimFixture>, IDisposable
     }
 
     [Fact]
+    public void Disabled_passes_straight_through_even_in_error_mode_and_logs_nothing()
+    {
+        // A default would resolve node, but `tack disable` means tack is off for this account: no resolution, no
+        // noResolution=error, no invocation log.
+        string binDir = CmdInstall("node", "@echo off\r\necho WHICH=registered\r\n");
+        var central = NodeConfig(("1.0.0", binDir), defaultVersion: "1.0.0");
+        central.Settings.Disabled = true;
+        central.Settings.NoResolution = "error";
+        central.Settings.Log = true;
+        string resolved = WriteResolved(central);
+        string node = _fx.ShimFor("node");
+
+        string pathDir = Directory.CreateDirectory(Path.Combine(_work, "onpath")).FullName;
+        File.WriteAllText(Path.Combine(pathDir, "node.cmd"), "@echo off\r\necho WHICH=passthrough\r\n");
+        var env = new Dictionary<string, string> { ["PATH"] = pathDir };
+
+        var r = Run(node, [], _work, resolved, env: env);
+
+        Assert.Equal(0, r.ExitCode);
+        Assert.Contains("WHICH=passthrough", r.Stdout);
+        Assert.False(Directory.Exists(Path.Combine(_work, "logs")));
+    }
+
+    [Fact]
     public void Corrupt_config_fails_loudly()
     {
         // Unlike a missing config, a broken one is the caller's own, and passing through would hide it.

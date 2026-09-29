@@ -22,9 +22,10 @@ public sealed class DoctorCommand : Command<DoctorSettings>
         var env = new TackEnvironment();
 
         if (TackProfile.IsDev)
-            AnsiConsole.MarkupLine($"[yellow]profile:[/] dev [grey](isolated data at {Markup.Escape(TackPaths.Root)}; its shims go at the front of the system PATH, just behind any release tack)[/]");
+            AnsiConsole.MarkupLine($"[yellow]profile:[/] dev [grey](isolated data at {Markup.Escape(TackPaths.User.Root)}; its shims go at the front of the system PATH, just behind any release tack)[/]");
         else
-            AnsiConsole.MarkupLine($"[grey]data:[/] {Markup.Escape(TackPaths.Root)}");
+            AnsiConsole.MarkupLine($"[grey]data:[/] {Markup.Escape(TackPaths.User.Root)}");
+        AnsiConsole.MarkupLine($"[grey]install:[/] {Markup.Escape(TackPaths.Machine.Root)}");
 
         if (settings.Fix)
         {
@@ -33,8 +34,7 @@ public sealed class DoctorCommand : Command<DoctorSettings>
         }
 
         var report = PathDoctor.Run(env.Load(), env.ShimsDir,
-            t => Environment.GetEnvironmentVariable("PATH", t),
-            activeShimsDir: env.ActiveShimsDir, disabled: env.IsDisabled);
+            t => Environment.GetEnvironmentVariable("PATH", t));
 
         foreach (var check in report.Checks)
         {
@@ -58,14 +58,9 @@ public sealed class DoctorCommand : Command<DoctorSettings>
     {
         AnsiConsole.MarkupLine("[grey]fixing...[/]");
 
-        // Regenerate shims + prune stale ones (into the active dir, so this works even while disabled).
+        // Regenerate shims + prune stale ones.
         Mutations.ReportReshim(env.Reshim(env.Load()));
 
-        if (env.IsDisabled)
-        {
-            AnsiConsole.MarkupLine("[yellow]tack is disabled; skipping PATH promotion. Run [green]tack enable[/] first, then re-run.[/]");
-            return;
-        }
         if (!OperatingSystem.IsWindows())
         {
             AnsiConsole.MarkupLine("[yellow]PATH promotion is Windows-only; skipped.[/]");
@@ -74,7 +69,7 @@ public sealed class DoctorCommand : Command<DoctorSettings>
 
         // Both profiles go to the front of the MACHINE PATH (a user-PATH entry loses to every system-wide install).
         // A dev instance lands directly behind the release shims, so it beats real installs but never the release tack.
-        PromoteMachinePath(env.ShimsDir, TackProfile.IsDev ? TackPaths.ReleaseShimsDirs : null);
+        PromoteMachinePath(env.ShimsDir, TackProfile.IsDev ? new[] { TackPaths.Machine.ReleaseShimsDir } : null);
     }
 
     [SupportedOSPlatform("windows")]
@@ -162,8 +157,8 @@ public sealed class ApplyMachinePathCommand : Command<ApplyMachinePathSettings>
             var machine = settings.Remove ? installer.Unregister()
                 : settings.InstallDir is not null ? installer.Register()
                 : installer.PromoteShimsOnMachinePath(settings.Behind.Length > 0 ? settings.Behind : null);
-            if (!string.IsNullOrEmpty(settings.BackupPath))
-                PathFixBackup.Save(settings.BackupPath, machine);
+            if (settings.BackupPath is { Length: > 0 } requested && PathFixBackup.InMachineDir(requested) is { } backup)
+                PathFixBackup.Save(backup, machine);
             return 0;
         }
         catch (Exception ex)

@@ -12,7 +12,7 @@ public sealed class ConfigStore
 {
     private readonly string _path;
 
-    public ConfigStore(string? path = null) => _path = path ?? TackPaths.ConfigJson;
+    public ConfigStore(string? path = null) => _path = path ?? TackPaths.User.ConfigJson;
 
     public string Path => _path;
 

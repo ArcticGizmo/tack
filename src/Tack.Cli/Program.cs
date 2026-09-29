@@ -48,7 +48,7 @@ app.Configure(cfg =>
     cfg.AddCommand<DoctorCommand>("doctor")
         .WithDescription("Diagnose PATH and shim health (--fix to repair).");
     cfg.AddCommand<DisableCommand>("disable")
-        .WithDescription("Turn tack off: park the shims dir so tools fall through to the real PATH.");
+        .WithDescription("Turn tack off for you: your tool calls fall through to the rest of PATH.");
     cfg.AddCommand<EnableCommand>("enable")
         .WithDescription("Turn tack back on after 'tack disable'.");
     cfg.AddBranch<CommandSettings>("zone", zone =>

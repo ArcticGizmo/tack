@@ -21,7 +21,7 @@ Already know you want it? [Skip the details and install it ▼](#installing)
 - **…or pin it without touching the repo.** A **zone** pins a directory and everything under it from your machine's own config. For the employer repo where nobody wants your tooling files committed.
 - **Always explains itself.** `tack info` tells you which version a directory gets *and the exact rule that won*.
 - **Invisible where it isn't configured.** No rule? The command falls straight through to whatever was next on PATH, as if tack weren't there.
-- **An off switch.** `tack disable` / `tack enable`, instantly, with no PATH edits and no admin rights.
+- **An off switch.** `tack disable` / `tack enable`, instantly, just for you, with no PATH edits and no admin rights.
 - **A doctor that fixes things.** `tack doctor` names whatever is shadowing the shims (looking at you, nvm-windows); `tack doctor --fix` sorts it out.
 
 ## How it works
@@ -125,11 +125,11 @@ The variables live only in your machine's config. A `tack.yml` can pick `claude:
 
 Windows builds the effective PATH as *system entries, then user entries*. A shims dir on the user PATH therefore still loses to any system-wide Node or Python. **`tack doctor --fix`** regenerates the shims and moves the shims dir to the **front of the system PATH**. It asks for elevation through UAC for that one write, and only that write.
 
-It edits the registry value directly, so tokens like `%SystemRoot%\system32` and `%NVM_HOME%` stay as tokens instead of being baked into literal paths. It prints the full before/after and saves a timestamped backup under `%LocalAppData%\tack\path-backups\`, so any edit can be undone by hand. The user PATH is left alone.
+It edits the registry value directly, so tokens like `%SystemRoot%\system32` and `%NVM_HOME%` stay as tokens instead of being baked into literal paths. It prints the full before/after and saves a timestamped backup in the `path-backups` folder of tack's install, so any edit can be undone by hand. The user PATH is left alone.
 
 ### The off switch
 
-`tack disable` parks the shims folder under another name. The PATH entry then points at nothing, and every tool falls straight through to the real PATH, even in shells that are already open. `tack enable` puts it back. There are no PATH edits and no admin prompt, which makes this the quickest way to answer "is this tack's fault?"
+`tack disable` switches tack off for you. The shims stay on PATH, but each one passes your call straight through to the next match on PATH, even in shells that are already open. `tack enable` switches it back on. It's a setting in your own config, so it needs no PATH edits or admin prompt and doesn't affect anyone else on the machine. That makes it the quickest way to answer "is this tack's fault?"
 
 Configuration keeps working while tack is disabled: add tools and zones as normal, and they go live the moment you re-enable.
 
@@ -277,8 +277,10 @@ dotnet test             # the test suite
 front end, and `Tack.Shim` is the NativeAOT proxy. The CLI only formats output: every decision is made in
 Core, so it's all unit-testable.
 
-Debug builds run as an isolated **dev profile**. They keep their own config, shims and `resolved.json` under
-`%LocalAppData%\tack (Dev)\`, so hacking on tack never touches your real setup. Set `TACK_DEV=0` to point a
+Debug builds run as an isolated **dev profile**. They keep their own config and `resolved.json` under
+`%LocalAppData%\tack (Dev)\` and their own shims under `%ProgramFiles%\Tack (Dev)\shims\`, so hacking on tack
+never touches your real setup. Writing those shims needs admin, so run a dev `reshim` or `doctor --fix` from an
+elevated terminal. Set `TACK_DEV=0` to point a
 debug build at the real profile, or `TACK_DEV=1` to force a release build into dev.
 
 To try a dev build as if it were really installed, run `run.bat doctor --fix`. This puts the dev shims at the

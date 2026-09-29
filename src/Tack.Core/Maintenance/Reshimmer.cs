@@ -23,6 +23,9 @@ public sealed class ReshimResult
     public IReadOnlyList<string> Locked { get; init; } = Array.Empty<string>();
     /// <summary>True when the shim binary couldn't be found, so resolved.json was written but no shims stamped.</summary>
     public bool ShimPayloadMissing { get; init; }
+    /// <summary>True when the shims dir can't be written without admin (a Program Files install from an
+    /// unelevated process), so resolved.json was written but shims may not be current.</summary>
+    public bool ShimsDirNeedsAdmin { get; init; }
     public IReadOnlyList<string> ShimNames { get; init; } = Array.Empty<string>();
     /// <summary>Pre-zones binding globs that couldn't be migrated to zones, so resolution ignores them.</summary>
     public IReadOnlyList<string> UnmigratedBindings { get; init; } = Array.Empty<string>();
@@ -58,38 +61,48 @@ public static class Reshimmer
                 foreach (var exposed in version.Exposes)
                     names.Add(exposed);
 
-        Directory.CreateDirectory(shimsDir);
-        DeleteAsideFiles(shimsDir);
-
         bool payloadMissing = string.IsNullOrEmpty(payload.ShimExe) || !File.Exists(payload.ShimExe);
         int written = 0, unchanged = 0, pruned = 0;
         var locked = new List<string>();
+        bool needsAdmin = false;
 
-        if (!payloadMissing)
+        // The config above is this user's and always compiles; the shims dir is the machine's, and an admin-owned
+        // one refuses an unelevated write outright (access denied, not the "in use" IOException handled below).
+        try
         {
-            // Support files (framework-dependent builds) live once in the shims dir; every copy loads them.
-            foreach (var f in payload.SupportFiles)
-                if (File.Exists(f))
-                    Stamp(f, Path.Combine(shimsDir, Path.GetFileName(f)), locked);
+            Directory.CreateDirectory(shimsDir);
+            DeleteAsideFiles(shimsDir);
 
-            foreach (var name in names)
+            if (!payloadMissing)
             {
-                switch (Stamp(payload.ShimExe, Path.Combine(shimsDir, name + ".exe"), locked))
+                // Support files (framework-dependent builds) live once in the shims dir; every copy loads them.
+                foreach (var f in payload.SupportFiles)
+                    if (File.Exists(f))
+                        Stamp(f, Path.Combine(shimsDir, Path.GetFileName(f)), locked);
+
+                foreach (var name in names)
                 {
-                    case StampOutcome.Written: written++; break;
-                    case StampOutcome.Unchanged: unchanged++; break;
+                    switch (Stamp(payload.ShimExe, Path.Combine(shimsDir, name + ".exe"), locked))
+                    {
+                        case StampOutcome.Written: written++; break;
+                        case StampOutcome.Unchanged: unchanged++; break;
+                    }
                 }
             }
-        }
 
-        // 3. Prune stale shim exes (a name no longer exposed). Support files are .dll/.json, never pruned.
-        foreach (var exe in Directory.GetFiles(shimsDir, "*.exe"))
+            // 3. Prune stale shim exes (a name no longer exposed). Support files are .dll/.json, never pruned.
+            foreach (var exe in Directory.GetFiles(shimsDir, "*.exe"))
+            {
+                string baseName = Path.GetFileNameWithoutExtension(exe);
+                if (names.Contains(baseName)) continue;
+                // A running shim can't be deleted, but it can be renamed away - which stops it resolving just the same.
+                if (TryDelete(exe) || MoveAside(exe)) pruned++;
+                else locked.Add(exe);
+            }
+        }
+        catch (UnauthorizedAccessException)
         {
-            string baseName = Path.GetFileNameWithoutExtension(exe);
-            if (names.Contains(baseName)) continue;
-            // A running shim can't be deleted, but it can be renamed away - which stops it resolving just the same.
-            if (TryDelete(exe) || MoveAside(exe)) pruned++;
-            else locked.Add(exe);
+            needsAdmin = true;
         }
 
         return new ReshimResult
@@ -100,6 +113,7 @@ public static class Reshimmer
             ShimsPruned = pruned,
             Locked = locked,
             ShimPayloadMissing = payloadMissing,
+            ShimsDirNeedsAdmin = needsAdmin,
             ShimNames = names.ToList(),
             UnmigratedBindings = ZoneRegistry.Unmigrated(config),
         };

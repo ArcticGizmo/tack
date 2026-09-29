@@ -98,7 +98,7 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
         foreach (var line in Render.EnvLines(versionEnv))
             AnsiConsole.MarkupLine($"[grey]env:[/] {Markup.Escape(line)}");
         Mutations.ReportReshim(env.Reshim(config));
-        if (env.IsDisabled)
+        if (config.Settings.Disabled)
             AnsiConsole.MarkupLine("[yellow]note:[/] tack is disabled - this is configured but won't take effect until [green]tack enable[/].");
         else if (!Render.OnPath(env.ShimsDir))
             AnsiConsole.MarkupLine("[yellow]note:[/] the shims dir is not on PATH yet - installing tack wires it up, or run [green]tack doctor[/].");
@@ -115,7 +115,7 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
             tool,
             t => Environment.GetEnvironmentVariable("PATH", t),
             // Every tack shims dir (both profiles): a dev instance must not "discover" the release tack's shims.
-            TackPaths.AllShimsDirs.Append(env.ShimsDir).Append(env.DisabledShimsDir).Append(env.InstallDir),
+            TackPaths.Machine.AllShimsDirs.Append(env.ShimsDir).Append(env.InstallDir),
             File.Exists);
 
         if (matches.Count == 0)

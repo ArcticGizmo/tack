@@ -105,4 +105,10 @@ public sealed class TackSettings
     /// (<c>tack log on</c>; see <see cref="Tack.Core.Diagnostics.ShimLog"/>). Left out of the JSON when false.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool Log { get; set; }
+
+    /// <summary>When true, tack is off for this account (<c>tack disable</c>): every shim passes straight through
+    /// to the next match on PATH, as if there were no config. Only this account's shells are affected; the shims
+    /// stay on the system PATH for everyone. Left out of the JSON when false.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Disabled { get; set; }
 }

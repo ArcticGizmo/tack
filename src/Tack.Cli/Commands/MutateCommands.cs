@@ -11,7 +11,9 @@ internal static class Mutations
 {
     public static void ReportReshim(ReshimResult r)
     {
-        if (r.ShimPayloadMissing)
+        if (r.ShimsDirNeedsAdmin)
+            AnsiConsole.MarkupLine("[yellow]resolved.json updated, but the shims dir needs admin to write, so shims weren't updated.[/] [grey]re-run from an elevated terminal.[/]");
+        else if (r.ShimPayloadMissing)
             AnsiConsole.MarkupLine("[yellow]resolved.json updated, but tack-shim.exe was not found next to tack, so no shims were stamped (expected under a dev `dotnet run`).[/]");
         else
             AnsiConsole.MarkupLine($"[grey]reshim:[/] {r.ShimsWritten} shim(s) written, {r.ShimsUnchanged} up to date, {r.ShimsPruned} pruned"

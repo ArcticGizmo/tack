@@ -1,20 +1,34 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Tack.Core;
 using Tack.Core.Platform;
 
 namespace Tack.Cli;
 
 /// <summary>
-/// Persists the before/after of a <c>tack doctor --fix</c> PATH edit to a timestamped JSON file under the tack
-/// data dir - a safety net (and audit trail) while the machine-PATH rewrite earns trust: if an edit goes wrong,
-/// the previous value is recorded to paste back by hand. It also carries the machine before/after out of the
-/// short-lived elevated child process (which prints to a window that vanishes) back to the parent to display.
+/// Persists the before/after of a system PATH edit to a timestamped JSON file in the install's
+/// <c>path-backups</c> folder - a safety net (and audit trail) while the machine-PATH rewrite earns trust: if an
+/// edit goes wrong, the previous value is recorded to paste back by hand. It also carries the machine
+/// before/after out of the short-lived elevated child process (which prints to a window that vanishes) back to
+/// the parent to display. The folder is admin-owned, so only the elevated side writes it; the parent only reads.
 /// </summary>
-internal static class PathFixBackup
+internal static partial class PathFixBackup
 {
     public static string NewPath() =>
-        Path.Combine(TackPaths.Root, "path-backups", $"path-fix-{DateTime.Now:yyyyMMdd-HHmmss}.json");
+        Path.Combine(TackPaths.Machine.PathBackupsDir, $"path-fix-{DateTime.Now:yyyyMMdd-HHmmss}.json");
+
+    /// <summary>Where the elevated child writes the backup its parent asked for: the same file name, but always
+    /// in this install's backups folder. Null unless the name is one <see cref="NewPath"/> makes, so an elevated
+    /// write can't be pointed anywhere else.</summary>
+    public static string? InMachineDir(string requested)
+    {
+        string name = Path.GetFileName(requested);
+        return BackupName().IsMatch(name) ? Path.Combine(TackPaths.Machine.PathBackupsDir, name) : null;
+    }
+
+    [GeneratedRegex(@"^path-fix-\d{8}-\d{6}\.json$")]
+    private static partial Regex BackupName();
 
     /// <summary>Best-effort write; returns the path on success, null if it couldn't be saved.</summary>
     public static string? Save(string path, PathChange? machine)

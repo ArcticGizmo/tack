@@ -8,7 +8,8 @@ namespace Tack.Cli;
 /// Runs one edit of the system (machine) PATH - the only PATH tack ever writes. Already admin: the edit runs in
 /// this process. Otherwise just that step is relaunched elevated through UAC (the hidden
 /// <c>tack apply-machine-path</c>), so the rest of tack never runs as admin. Either way the before/after lands in
-/// a timestamped backup under the data dir, which is also how the elevated child hands its result back.
+/// a timestamped backup in the install's path-backups folder, which is also how the elevated child hands its
+/// result back.
 /// Shared by <c>tack setup</c>, the first-run setup, <c>tack doctor --fix</c> and the uninstall hook.
 /// </summary>
 [SupportedOSPlatform("windows")]
@@ -24,28 +25,31 @@ internal static class SystemPath
     /// <param name="timeout">Bound on the elevated child (an uninstall hook is killed after 30 s); null waits.</param>
     public static Result Edit(Func<PathChange?> direct, string elevatedArgs, TimeSpan? timeout = null)
     {
+        // The backups folder is admin-owned, so whichever side holds admin writes the record.
         string backup = PathFixBackup.NewPath();
         PathChange? change;
+        string? saved;
 
         if (Elevation.IsAdministrator())
         {
             try { change = direct(); }
             catch (Exception ex) { return new Result(Outcome.Failed, Error: ex.Message); }
+            saved = change is null ? null : PathFixBackup.Save(backup, change);
         }
         else
         {
-            try { Directory.CreateDirectory(Path.GetDirectoryName(backup)!); } catch { /* Save() reports if it can't write */ }
             switch (Elevation.RelaunchElevated($"apply-machine-path \"{backup}\" {elevatedArgs}", timeout))
             {
                 case Elevation.RelaunchOutcome.Cancelled: return new Result(Outcome.Declined);
                 case Elevation.RelaunchOutcome.Failed: return new Result(Outcome.Failed);
             }
             change = PathFixBackup.ReadMachine(backup); // the elevated child recorded it (null if already in place)
+            saved = change is null ? null : backup;
         }
 
         return change is null
             ? new Result(Outcome.Unchanged)
-            : new Result(Outcome.Changed, change, PathFixBackup.Save(backup, change));
+            : new Result(Outcome.Changed, change, saved);
     }
 
     /// <summary>Print where the backup went and the full before/after, so an edit can be reverted by hand.</summary>

@@ -23,7 +23,7 @@ public sealed class WindowsPathInstaller : IPathInstaller
     public WindowsPathInstaller(string? installDir = null, string? shimsDir = null)
     {
         _installDir = (installDir ?? AppContext.BaseDirectory).TrimEnd('\\', '/');
-        _shimsDir = (shimsDir ?? TackPaths.ShimsDir).TrimEnd('\\', '/');
+        _shimsDir = (shimsDir ?? TackPaths.Machine.ShimsDir).TrimEnd('\\', '/');
     }
 
     public string InstallDir => _installDir;
