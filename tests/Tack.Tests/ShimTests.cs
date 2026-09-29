@@ -53,6 +53,40 @@ public sealed class ShimTests : IClassFixture<ShimFixture>, IDisposable
     }
 
     [Fact]
+    public void Cmd_target_receives_every_argument_literally()
+    {
+        // npm.cmd's shape: a .cmd in a folder with a space (like C:\Program Files\nodejs) forwarding %* to a
+        // native exe. With plain exe quoting through cmd /c, the spaced folder broke the call outright, `&` / `>`
+        // ran as cmd operators and %OS% expanded.
+        string real = _fx.FakeNativeInstall("realnode");
+        string binDir = CmdInstall("node", $"@\"{Path.Combine(real, "realnode.exe")}\" %*\r\n", folder: "has space");
+        string resolved = WriteResolved(NodeConfig(("1.0.0", binDir), defaultVersion: "1.0.0"));
+        string node = _fx.ShimFor("node");
+
+        string[] args = ["two words", "a&b", "c>d", "%OS%", "q\"uote", @"trail\", ""];
+        var r = Run(node, args, _work, resolved);
+
+        Assert.Equal(0, r.ExitCode);
+        Assert.Contains("TOOL=realnode", r.Stdout);
+        Assert.Contains($"ARGS={string.Join('|', args)}", r.Stdout);
+        Assert.False(File.Exists(Path.Combine(_work, "d")), "a '>' in an argument must not redirect output");
+    }
+
+    [Fact]
+    public void Cmd_target_refuses_an_argument_with_a_line_break()
+    {
+        string binDir = CmdInstall("node", "@echo off\r\necho RAN\r\n");
+        string resolved = WriteResolved(NodeConfig(("1.0.0", binDir), defaultVersion: "1.0.0"));
+        string node = _fx.ShimFor("node");
+
+        var r = Run(node, ["a\nb"], _work, resolved);
+
+        Assert.Equal(127, r.ExitCode);
+        Assert.Contains("line break", r.Stderr);
+        Assert.DoesNotContain("RAN", r.Stdout);
+    }
+
+    [Fact]
     public void Nearest_tack_yml_selects_the_version_end_to_end()
     {
         // Two versions with distinguishable .cmd targets; a tack.yml pins v2 in a subtree.
@@ -282,9 +316,10 @@ public sealed class ShimTests : IClassFixture<ShimFixture>, IDisposable
         return path;
     }
 
-    private string CmdInstall(string exposedName, string cmdBody)
+    private string CmdInstall(string exposedName, string cmdBody, string? folder = null)
     {
         string dir = Directory.CreateTempSubdirectory("tack-bin-").FullName;
+        if (folder is not null) dir = Directory.CreateDirectory(Path.Combine(dir, folder)).FullName;
         File.WriteAllText(Path.Combine(dir, exposedName + ".cmd"), cmdBody);
         return dir;
     }

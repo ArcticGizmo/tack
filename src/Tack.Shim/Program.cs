@@ -4,6 +4,7 @@ using System.Text.Json;
 using Tack.Core;
 using Tack.Core.Config;
 using Tack.Core.Diagnostics;
+using Tack.Core.Platform;
 using Tack.Core.Resolution;
 
 // tack-shim
@@ -53,14 +54,20 @@ try
     var res = resolver.Resolve(exposed, Environment.CurrentDirectory, ctx);
     Debug($"source={res.Source} tool={res.Tool} version={res.Version} binDir={res.BinDir} :: {res.Detail}");
 
-    // 4. Decide what to run (or why not), record it if `tack log on`, then act.
+    // 4. Decide what to run (or why not) and how, record it if `tack log on`, then act.
     var (target, error) = Decide(exposed, res, config);
+    ProcessStartInfo? psi = null;
+    if (target is not null)
+    {
+        (psi, error) = StartInfo(target, args, res.Env);
+        if (psi is null) target = null;
+    }
     if (config.Settings.Log) LogInvocation(ShimLog.PathFor(resolvedPath), exposed, args, res, target, error);
 
     // Install the Ctrl-C handler once, before any child is spawned.
     Native.IgnoreConsoleInterrupts();
 
-    return target is null ? Fail(error!) : Exec(target, args, res.Env);
+    return psi is null ? Fail(error!) : Exec(psi);
 }
 catch (Exception ex)
 {
@@ -156,32 +163,44 @@ static void LogInvocation(string logPath, string exposed, string[] forwarded, Re
 
 // ---- exec proxy ---------------------------------------------------------------------------------
 
-// Spawn the target as a child, inheriting our console + std handles, and return ITS exit code. A .cmd/.bat
-// is not a PE image, so CreateProcess (UseShellExecute=false) rejects it; those go through cmd.exe /c. The
+// How to start the target, or why it can't be. A .cmd/.bat is not a PE image, so CreateProcess
+// (UseShellExecute=false) rejects it; those go through cmd.exe with every argument escaped for cmd (see
+// BatchCommandLine - plain exe quoting lets an argument inject commands), and an argument that can't be escaped
+// fails the call rather than being passed on. cmd.exe is System32's own, never %ComSpec% or a PATH search. The
 // resolved version's own variables (if any) are layered over our environment, %VARS% expanded against it.
-static int Exec(string target, string[] forwarded, IReadOnlyDictionary<string, string>? env)
+static (ProcessStartInfo? Psi, string? Error) StartInfo(string target, string[] forwarded,
+    IReadOnlyDictionary<string, string>? env)
 {
     string ext = Path.GetExtension(target);
     bool viaCmd = ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase)
                || ext.Equals(".bat", StringComparison.OrdinalIgnoreCase);
 
-    var psi = new ProcessStartInfo
-    {
-        FileName = viaCmd ? Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe" : target,
-        UseShellExecute = false,   // inherit handles, no shell, no new window
-    };
+    var psi = new ProcessStartInfo { UseShellExecute = false }; // inherit handles, no shell, no new window
     if (viaCmd)
     {
-        psi.ArgumentList.Add("/c");
-        psi.ArgumentList.Add(target);
+        string? cmdArgs = BatchCommandLine.Build(target, forwarded, out var error);
+        if (cmdArgs is null) return (null, $"{Path.GetFileName(target)}: {error}");
+        psi.FileName = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+        psi.Arguments = cmdArgs;
+        Debug($"cmd: {cmdArgs}");
     }
-    foreach (var a in forwarded) psi.ArgumentList.Add(a);
+    else
+    {
+        psi.FileName = target;
+        foreach (var a in forwarded) psi.ArgumentList.Add(a);
+    }
+
     if (env is { Count: > 0 })
     {
         Debug($"env: {string.Join(", ", env.Keys)}");
         VersionEnv.ApplyTo(psi.Environment, env, Environment.ExpandEnvironmentVariables);
     }
+    return (psi, null);
+}
 
+// Spawn the target as a child, inheriting our console + std handles, and return ITS exit code.
+static int Exec(ProcessStartInfo psi)
+{
     using var child = Process.Start(psi);
     if (child is null) return Fail("failed to start target process");
     child.WaitForExit();

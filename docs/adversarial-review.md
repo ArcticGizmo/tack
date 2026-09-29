@@ -24,7 +24,7 @@ The attacker is a malicious program running as the tack user, at normal (non-adm
 | # | Severity | Finding | Status |
 |---|---|---|---|
 | 1 | Critical | A user-writable folder is first on the system PATH | confirmed on a real machine |
-| 2 | High | `.cmd` targets allow command injection and break on quoted paths | confirmed with the shim |
+| 2 | High | `.cmd` targets allow command injection and break on quoted paths | **fixed** (confirmed with the shim) |
 | 3 | Medium | Elevated tack writes and deletes inside user-writable folders (junction attacks) | from code |
 | 4 | Medium | `apply-machine-path` accepts any folder without checking it | from code |
 | 5 | Medium | Auto-detected commands can take over unrelated system commands | from code |
@@ -136,7 +136,16 @@ Open questions for the first spike:
 
 ### 2. High: `.cmd` targets allow command injection and break on quoted paths
 
-**Status: confirmed with a real build of the shim.**
+**Status: confirmed with a real build of the shim. Fixed:** `.cmd`/`.bat` targets now run as System32's `cmd.exe /e:ON /v:OFF /d /c ""<script>" <args>"`, with each argument escaped by `Tack.Core.Platform.BatchCommandLine`, a port of Rust std's BatBadBut fix:
+
+- arguments containing cmd operators are quoted, and `"` is doubled,
+- `%` becomes `%%cd:~,%`,
+- an argument with a line break or NUL is refused (exit 127),
+- `%ComSpec%` is no longer used.
+
+`BatchCommandLineTests` pins the escaping. Two `ShimTests` check that an npm-shaped `.cmd` in a folder with a space receives `two words`, `a&b`, `c>d`, `%OS%`, `q"uote`, `trail\` and `""` literally, and that a line break is refused.
+
+The original analysis follows.
 
 `Exec` (`src/Tack.Shim/Program.cs:162-189`) runs `.cmd` and `.bat` targets as `cmd.exe /c <target> <args>`, using .NET's `ProcessStartInfo.ArgumentList`. That applies normal exe-style quoting, but cmd.exe parses the command line differently: it treats `&`, `|`, `<`, `>`, `^` and `%` as special, and strips quotes after `/c` in its own way.
 
