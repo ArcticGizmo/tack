@@ -12,8 +12,12 @@
     <RootNamespace>TackMsiSpike</RootNamespace>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <!-- build.ps1 passes the version under test; the default is what tack pins today. -->
+    <VelopackVersion Condition="'$(VelopackVersion)' == ''">1.2.0</VelopackVersion>
+  </PropertyGroup>
+
   <ItemGroup>
-    <!-- Same version tack pins, so the answers apply to tack as it ships today. -->
-    <PackageReference Include="Velopack" Version="1.2.0" />
+    <PackageReference Include="Velopack" Version="$(VelopackVersion)" />
   </ItemGroup>
 </Project>

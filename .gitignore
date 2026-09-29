@@ -6,7 +6,10 @@
 publish/
 releases/
 
-spikes/m9-msi/msi/
+spikes/m9-msi/installers/
+
+# Local-only experiments (e.g. sandbox/uac-probe), never committed
+sandbox/
 
 # IDE / editor / user files
 .vs/

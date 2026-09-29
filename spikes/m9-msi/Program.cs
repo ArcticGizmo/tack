@@ -16,7 +16,7 @@ using Velopack.Sources;
 // the PATH key is only opened for write, never written.
 
 VelopackApp.Build()
-    .OnAfterInstallFastCallback(v => Report("after-install", v.ToString()))
+    .OnAfterInstallFastCallback(v => Report("after-install", v.ToString(), writeMarkers: true))
     .OnBeforeUpdateFastCallback(v => Report("before-update", v.ToString()))
     .OnAfterUpdateFastCallback(v => Report("after-update", v.ToString()))
     .OnBeforeUninstallFastCallback(v => Report("before-uninstall", v.ToString()))
@@ -27,6 +27,12 @@ switch (args.FirstOrDefault())
 {
     case "whoami":
         Console.Write(Describe("whoami", Version()));
+        return 0;
+
+    // Which install-time markers are still here: run after an update to see what Velopack's swap kept.
+    case "check":
+        foreach (var (where, path) in MarkerPaths())
+            Console.WriteLine($"marker in {where,-7} {(File.Exists(path) ? "present" : "MISSING")}  {path}");
         return 0;
 
     // Blocking rather than `await`: an awaited top-level statement moves VelopackApp.Run() into an async state
@@ -69,13 +75,15 @@ static string Version() =>
 static string LogDir() => Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "TackMsiSpike");
 
-static void Report(string hook, string version)
+static void Report(string hook, string version, bool writeMarkers = false)
 {
     try
     {
+        string report = Describe(hook, version);
+        if (writeMarkers) report += WriteMarkers();
         Directory.CreateDirectory(LogDir());
-        File.WriteAllText(Path.Combine(LogDir(),$"{DateTime.Now:yyyyMMdd-HHmmss}-{hook}-{Environment.ProcessId}.log"),
-            Describe(hook, version));
+        File.WriteAllText(Path.Combine(LogDir(), $"{DateTime.Now:yyyyMMdd-HHmmss}-{hook}-{Environment.ProcessId}.log"),
+            report);
     }
     catch
     {
@@ -103,6 +111,37 @@ static string Describe(string hook, string version)
         can open HKLM env for write: {CanOpenMachineEnvForWrite()}
 
         """;
+}
+
+// Where tack could keep files it adds after install (shims): the install root beside Update.exe, or current\,
+// which Velopack swaps out on every update.
+static (string Where, string Path)[] MarkerPaths()
+{
+    string current = AppContext.BaseDirectory.TrimEnd('\\', '/');
+    string root = Path.GetDirectoryName(current) ?? current;
+    return new[]
+    {
+        ("root", Path.Combine(root, "tack-spike-marker.txt")),
+        ("current", Path.Combine(current, "tack-spike-marker.txt")),
+    };
+}
+
+static string WriteMarkers()
+{
+    var lines = new System.Text.StringBuilder();
+    foreach (var (where, path) in MarkerPaths())
+    {
+        try
+        {
+            File.WriteAllText(path, $"written by after-install at {DateTime.Now:o}");
+            lines.AppendLine($"marker in {where}: written  {path}");
+        }
+        catch (Exception ex)
+        {
+            lines.AppendLine($"marker in {where}: FAILED ({ex.GetType().Name})  {path}");
+        }
+    }
+    return lines.ToString();
 }
 
 static string CanWriteDir(string dir)
