@@ -437,6 +437,58 @@ public class ResolverTests
         Assert.Equal(ResolutionSource.VersionNotInstalled, r.Source);
     }
 
+    // A tack.yml comes with whatever repo you clone, so it may only choose between versions already registered in
+    // your own config. Whatever it says, the folder that runs comes from config.json.
+    [Theory]
+    [InlineData(@"C:\evil")]
+    [InlineData(@"C:\evil\node.exe")]
+    [InlineData(@"..\..\evil")]
+    [InlineData(@"\\attacker\share\node")]
+    [InlineData("%TEMP%")]
+    [InlineData("*")]
+    [InlineData("20.11.0/../../evil")]
+    [InlineData("20.11.0.")]   // a dotted prefix of nothing registered
+    public void Tack_yml_cannot_name_anything_but_a_registered_version(string value)
+    {
+        var files = new Dictionary<string, string> { [@"C:\repo\tack.yml"] = $"tools:\n  node: \"{value}\"\n" };
+        var r = BuildResolver().Resolve("node", @"C:\repo", Ctx(files: files));
+
+        Assert.Equal(ResolutionSource.VersionNotInstalled, r.Source);
+        Assert.Null(r.BinDir);
+        Assert.Null(r.Env);
+    }
+
+    [Fact]
+    public void Env_override_cannot_name_a_path_either()
+    {
+        var env = new Dictionary<string, string> { ["TACK_NODE_VERSION"] = @"C:\evil" };
+        var r = BuildResolver().Resolve("node", @"C:\x", Ctx(env: env));
+        Assert.Equal(ResolutionSource.VersionNotInstalled, r.Source);
+        Assert.Null(r.BinDir);
+    }
+
+    [Fact]
+    public void Tack_yml_only_ever_resolves_to_a_registered_bindir()
+    {
+        var registered = CompilerTests.Sample().Tools["node"].Versions.Values.Select(v => v.BinDir).ToHashSet();
+        foreach (var value in new[] { "18", "18.19.0", "20", "20.11.0" })
+        {
+            var files = new Dictionary<string, string> { [@"C:\repo\tack.yml"] = $"tools:\n  node: {value}\n" };
+            var r = BuildResolver().Resolve("node", @"C:\repo", Ctx(files: files));
+            Assert.Equal(ResolutionSource.TackYml, r.Source);
+            Assert.Contains(r.BinDir!, registered);
+        }
+    }
+
+    [Fact]
+    public void Tack_yml_entries_for_unregistered_tools_are_ignored()
+    {
+        // No way to invent a tool from a repo: `ruby` isn't registered, so there's nothing for it to pick.
+        var files = new Dictionary<string, string> { [@"C:\repo\tack.yml"] = "tools:\n  ruby: C:\\evil\n  node: 18\n" };
+        Assert.Equal(ResolutionSource.Unregistered, BuildResolver().Resolve("ruby", @"C:\repo", Ctx(files: files)).Source);
+        Assert.Equal("18.19.0", BuildResolver().Resolve("node", @"C:\repo", Ctx(files: files)).Version);
+    }
+
     // Sample() plus: C:\work\legacy switches node off, C:\work\legacy\revived switches it back on, and C:\corp\free
     // is an enforced none zone inside the enforced C:\corp one.
     private static Resolver NoneResolver()
