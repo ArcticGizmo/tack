@@ -123,12 +123,23 @@ Under B:
 - UAC is needed only for install, uninstall, update, and when the set of shim names changes. New versions, zones and settings don't need it.
 - Existing machines need migrating: the installer must remove the old `%LOCALAPPDATA%\tack\shims`, `tack (Dev)\shims` and `Tack\current` entries from the system PATH.
 
-Open questions for the first spike:
+The spike has since answered these (see [spikes/m9-msi](../spikes/m9-msi/README.md#findings-2026-09-29)), and the
+implementation plan is [docs/m9-per-machine-plan.md](m9-per-machine-plan.md).
+
+Open questions for the first spike (now answered):
 
 - whether updates ask for UAC on a Program Files install,
 - whether install and uninstall hooks run elevated under the MSI,
 - whether the pinned Velopack version supports `--msi`,
 - where the dev profile's shims should live.
+
+#### Decision revised (2026-10-01): shims on the user PATH
+
+Superseded by [ADR 0002](adr/0002-shims-on-the-user-path.md). Under legacy UAC an elevated process reads the user
+PATH too, so where the shims live doesn't change what reaches your elevated sessions, and (c) above is the same
+same-account trust every per-user tool relies on. The boundary that matters is (a) and (b): other accounts and
+SYSTEM. Putting nothing on the system PATH closes both without a per-machine install or any elevated code. A name
+that something on the system PATH already provides isn't intercepted, and tack reports it instead.
 
 **Separate gap:** nothing can take the **dev** entry off the system PATH. Only the uninstall hook calls `Unregister` (`src/Tack.Cli/InstallHook.cs:94`), and it only removes the release profile's folder. After `run.bat doctor --fix`, `tack (Dev)\shims` stays on the system PATH for good. Add a way to remove it, for example `tack doctor --unwire`.
 
