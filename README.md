@@ -38,7 +38,7 @@ Commands a version ships alongside its main binary always follow it. Pin `node@2
 For any directory, tack takes the first rule that applies, top to bottom:
 
 1. **`TACK_<TOOL>_VERSION`** environment variable, e.g. `TACK_NODE_VERSION=18.19.0`. The escape hatch, handy in CI.
-2. **An enforced zone.** A zone marked `--enforce` beats the repo's own `tack.yml`.
+2. **A zone that ignores tack files.** A zone added with `--ignore-tack-files` beats the repo's own `tack.yml`.
 3. **The nearest `tack.yml`**, walking up from the current directory to the drive root.
 4. **The deepest zone** containing the current directory.
 5. **The tool's default**, which is the first version you registered.
@@ -67,7 +67,7 @@ tack zone add C:\work\employer\new-thing node@22   # deeper zones win
 
 A zone is a plain directory, and it covers itself and everything under it. Every zone that applies to a directory is one of its parents, so the deepest one always wins outright. There's no specificity scoring and there are no ties. Adding a zone that already exists for the same directory and tool updates it. `tack zone list` shows them all, and `tack zone remove` with no arguments opens an interactive picker.
 
-- **`--enforce`** lifts a zone above a repo's `tack.yml`, for when the machine's rule has to win.
+- **`--ignore-tack-files`** lifts a zone above a repo's `tack.yml`, for when the machine's rule has to win.
 - **`node@none`** switches tack off for node in that directory tree, so `node` runs whatever is next on PATH. A deeper zone can switch it back on.
 - **`none`** on its own (`tack zone add C:\legacy none`) switches tack off for *every* tool there, including ones you register later.
 

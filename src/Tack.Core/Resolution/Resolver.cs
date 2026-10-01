@@ -88,9 +88,9 @@ public sealed class Resolver
         var enforced = NearestZone(rt.Zones, cwd, enforce: true);
         if (enforced is not null)
             return ZoneVersion.IsNone(enforced.Version)
-                ? Off(exposedName, tool, $"enforced zone {enforced.Path} sets {(enforced.AllTools ? "every tool" : tool)} to none")
+                ? Off(exposedName, tool, $"zone {enforced.Path} (ignores tack files) sets {(enforced.AllTools ? "every tool" : tool)} to none")
                 : Select(exposedName, tool, rt, enforced.Version, ResolutionSource.EnforcedZone,
-                    $"enforced zone {enforced.Path}");
+                    $"zone {enforced.Path} (ignores tack files)");
 
         // 3. Nearest tack.yml (walking up) that names this tool.
         foreach (var dir in WalkUp(cwd))

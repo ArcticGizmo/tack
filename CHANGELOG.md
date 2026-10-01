@@ -14,6 +14,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Windows' own `curl` and friends are politely declined
 - `tack doctor` checks nobody else can write tack's folders, and fails if any tack folder is still on the system PATH
 - `tack setup --remove` takes tack back off your PATH; removing a tool now takes its shims with it
+- `zone add --enforce` is now `--ignore-tack-files`, which says what it actually does
 
 ---
 

@@ -18,7 +18,7 @@ internal static class Render
     public static string SourceMarkup(ResolutionSource s) => s switch
     {
         ResolutionSource.EnvOverride => "[aqua]env[/]",
-        ResolutionSource.EnforcedZone => "[red]enforced zone[/]",
+        ResolutionSource.EnforcedZone => "[red]zone (ignores tack files)[/]",
         ResolutionSource.TackYml => "[green]tack.yml[/]",
         ResolutionSource.Zone => "[blue]zone[/]",
         ResolutionSource.Default => "[grey]default[/]",

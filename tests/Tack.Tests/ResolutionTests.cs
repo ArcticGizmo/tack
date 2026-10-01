@@ -533,7 +533,7 @@ public class ResolverTests
         var files = new Dictionary<string, string> { [@"C:\corp\free\x\tack.yml"] = "tools:\n  node: 20\n" };
         var r = NoneResolver().Resolve("node", @"C:\corp\free\x", Ctx(files: files));
         Assert.Equal(ResolutionSource.ZoneNone, r.Source);
-        Assert.StartsWith(@"enforced zone C:\corp\free", r.Detail);
+        Assert.StartsWith(@"zone C:\corp\free (ignores tack files)", r.Detail);
     }
 
     [Fact]
