@@ -1,95 +1,80 @@
+using System.ComponentModel;
 using System.Runtime.Versioning;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using Tack.Core;
-using Tack.Core.Platform;
 
 namespace Tack.Cli.Commands;
 
-/// <summary>
-/// <c>tack setup</c>: put tack on the SYSTEM PATH - shims dir at the front, tack.exe's dir at the end - and stamp
-/// the shims your config needs. This is the install's PATH step, and the repair for either being skipped. The Velopack install hook can't do it unelevated (it's killed after 30 s, too short
-/// to sit on a UAC prompt) and must never fall back to the user PATH, so it runs here instead: from the first
-/// run after Setup, from install.ps1 in the user's own terminal, or by hand to retry after declining UAC.
-/// </summary>
-public sealed class SetupCommand : Command
+public sealed class SetupSettings : CommandSettings
 {
-    public override int Execute(CommandContext context) =>
-        OperatingSystem.IsWindows() ? PathSetup.Run() : 0;
+    [CommandOption("--remove")]
+    [Description("Take this profile's entries off your user PATH instead (uninstall does this for a release install).")]
+    public bool Remove { get; init; }
+}
+
+/// <summary>
+/// <c>tack setup</c>: put tack on your USER PATH - shims dir at the front, tack.exe's dir at the end - and stamp the
+/// shims your config needs. The install hook does the same on every install and update; this is the repair, and
+/// what install.ps1 runs to show you the result. A dev build's shims go just behind the release tack's instead.
+/// Nothing here needs admin, and tack never touches the system PATH.
+/// </summary>
+public sealed class SetupCommand : Command<SetupSettings>
+{
+    public override int Execute(CommandContext context, SetupSettings settings)
+    {
+        if (!OperatingSystem.IsWindows()) return 0;
+        return settings.Remove ? PathSetup.Remove() : PathSetup.Run();
+    }
 }
 
 [SupportedOSPlatform("windows")]
 internal static class PathSetup
 {
-    // Setup's first-run launch and install.ps1 can both reach here at once; only one of them should prompt.
-    // The loser waits, then finds the PATH already wired and says so.
-    private const string GateName = @"Local\tack-path-setup";
-
     public static int Run()
     {
-        if (TackProfile.IsDev)
-        {
-            AnsiConsole.MarkupLine("[yellow]dev build:[/] its shims go just behind the release tack's; use [green]tack doctor --fix[/] instead.");
-            return 1;
-        }
-
-        using var gate = new Mutex(false, GateName);
-        bool owned;
-        try { owned = gate.WaitOne(TimeSpan.FromMinutes(10)); }
-        catch (AbandonedMutexException) { owned = true; }
-        try
-        {
-            return Apply(new WindowsPathInstaller(shimsDir: new TackEnvironment().ShimsDir));
-        }
-        finally
-        {
-            if (owned) gate.ReleaseMutex();
-        }
-    }
-
-    // PATH, then the shims your config needs; each asks for UAC only if it has something to write.
-    private static int Apply(WindowsPathInstaller installer)
-    {
-        int rc = WirePath(installer);
         var env = new TackEnvironment();
+        var installer = env.PathInstaller();
+        string where = TackProfile.IsDev ? "your user PATH, behind the release tack's shims" : "your user PATH";
+
+        var result = UserPath.Edit(installer.Register);
+        int rc;
+        if (result.Error is { } err)
+        {
+            AnsiConsole.MarkupLine($"[red]couldn't update your user PATH:[/] {Markup.Escape(err)}");
+            rc = 1;
+        }
+        else if (result.Change is null)
+        {
+            AnsiConsole.MarkupLine($"[green]tack is on {where}.[/] [grey]nothing to change.[/]");
+            rc = 0;
+        }
+        else
+        {
+            AnsiConsole.MarkupLine($"[green]tack added to {where}[/] [grey](%VAR% tokens preserved)[/] - open a new terminal to pick it up.");
+            UserPath.Report(result);
+            rc = 0;
+        }
+
         bool shims = Shims.Sync(env, env.Load(), checkPayload: true);
         return rc != 0 ? rc : shims ? 0 : 1;
     }
 
-    private static int WirePath(WindowsPathInstaller installer)
+    public static int Remove()
     {
-        if (!installer.NeedsRegister())
+        var result = UserPath.Edit(new TackEnvironment().PathInstaller().Unregister);
+        if (result.Error is { } err)
         {
-            AnsiConsole.MarkupLine("[green]tack is on the system PATH.[/] [grey]nothing to change.[/]");
+            AnsiConsole.MarkupLine($"[red]couldn't update your user PATH:[/] {Markup.Escape(err)}");
+            return 1;
+        }
+        if (result.Change is null)
+        {
+            AnsiConsole.MarkupLine("[grey]tack isn't on your user PATH; nothing to change.[/]");
             return 0;
         }
-
-        if (!Elevation.IsAdministrator())
-            AnsiConsole.MarkupLine("[grey]tack goes on the system PATH (never your user PATH), which needs admin; prompting via UAC...[/]");
-
-        var result = SystemPath.Edit(() => installer.Register(),
-            $"--shims {SystemPath.Quote(installer.ShimsDir)} --install-dir {SystemPath.Quote(installer.InstallDir)}");
-
-        string retry = Markup.Escape(Path.Combine(installer.InstallDir, "tack.exe")) + " setup";
-        switch (result.Outcome)
-        {
-            case SystemPath.Outcome.Declined:
-                AnsiConsole.MarkupLine("[yellow]elevation declined; system PATH not changed.[/] tack won't intercept tool calls until it's on PATH.");
-                AnsiConsole.MarkupLine($"[grey]run[/] [green]{retry}[/] [grey]to try again.[/]");
-                return 1;
-            case SystemPath.Outcome.Failed:
-                AnsiConsole.MarkupLine(result.Error is { } err
-                    ? $"[red]couldn't update the system PATH:[/] {Markup.Escape(err)}"
-                    : "[red]elevated PATH update failed.[/]");
-                AnsiConsole.MarkupLine($"[grey]run[/] [green]{retry}[/] [grey]from an elevated terminal to try again.[/]");
-                return 1;
-            case SystemPath.Outcome.Unchanged:
-                AnsiConsole.MarkupLine("[green]tack is on the system PATH.[/] [grey]nothing to change.[/]");
-                return 0;
-        }
-
-        AnsiConsole.MarkupLine("[green]tack added to the system PATH[/] [grey](shims dir first, tack.exe's dir last; %VAR% tokens preserved)[/] - open a new terminal to pick it up.");
-        SystemPath.Report(result);
+        AnsiConsole.MarkupLine("[green]tack removed from your user PATH[/] - open a new terminal to pick it up. Your config and shims are left in place.");
+        UserPath.Report(result);
         return 0;
     }
 }

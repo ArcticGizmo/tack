@@ -42,14 +42,13 @@ public sealed class PruneResult
 }
 
 /// <summary>
-/// The machine's half of a reshim: one copy of tack-shim.exe per command name in the shims dir. Copy (not
-/// symlink) is deliberate - privilege-free on Windows (scope plan section 5.1). The dir is admin-owned, so
-/// <see cref="Stamp"/> and <see cref="Prune"/> only ever run elevated; <see cref="Pending"/> and <see cref="Stale"/>
-/// are reads and run anywhere.
+/// The shims half of a reshim: one copy of tack-shim.exe per command name in this account's shims dir. Copy (not
+/// symlink) is deliberate - privilege-free on Windows (scope plan section 5.1). <see cref="Pending"/> and
+/// <see cref="Stale"/> are reads; <see cref="Stamp"/> and <see cref="Prune"/> write.
 ///
 /// <para>Every name is checked with <see cref="ShimName"/>, whoever calls, and only <c>&lt;name&gt;.exe</c> for a
-/// name it's given is ever written or deleted. A shims dir is shared by every account, so nothing here removes a
-/// shim just because the caller's config doesn't mention it.</para>
+/// name it's given is ever written or deleted - never "any exe that isn't on the list", so a stray file in the dir
+/// is left alone rather than deleted on a guess.</para>
 ///
 /// <para>The shims dir is live: any running shim holds its own exe (and, for a framework-dependent build,
 /// tack-shim.dll) open, and AV scanners briefly lock freshly written executables. So a stamp only writes what
@@ -80,8 +79,8 @@ public static class ShimStamper
         return new ShimPlan { Names = pending, SupportFiles = support };
     }
 
-    /// <summary>Shims in the dir for valid names that <paramref name="keep"/> doesn't list. Another account may
-    /// still use them, so they're only ever candidates for an explicit, confirmed <see cref="Prune"/>.</summary>
+    /// <summary>Shims in the dir for valid names that <paramref name="keep"/> doesn't list: what a
+    /// <see cref="Prune"/> after a config change removes.</summary>
     public static List<string> Stale(IEnumerable<string> keep, string shimsDir)
     {
         if (!Directory.Exists(shimsDir)) return new List<string>();
@@ -94,8 +93,7 @@ public static class ShimStamper
             .ToList();
     }
 
-    /// <summary>Write (or refresh) the shims for <paramref name="names"/> and the payload's support files. Needs
-    /// write access to the shims dir, i.e. elevation for a Program Files install.</summary>
+    /// <summary>Write (or refresh) the shims for <paramref name="names"/> and the payload's support files.</summary>
     public static StampResult Stamp(IEnumerable<string> names, string shimsDir, ShimPayload payload)
     {
         var (valid, rejected) = Split(names);
@@ -127,7 +125,7 @@ public static class ShimStamper
     }
 
     /// <summary>Remove the shims for exactly <paramref name="names"/>. Support files are never removed: other
-    /// shims still load them. Needs write access to the shims dir.</summary>
+    /// shims still load them.</summary>
     public static PruneResult Prune(IEnumerable<string> names, string shimsDir)
     {
         var (valid, rejected) = Split(names);

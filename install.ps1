@@ -111,23 +111,19 @@ The download has been deleted. Retry; if it keeps failing, report it at $(Get-Re
 
         # --- Install -----------------------------------------------------------------------------------
         # Velopack's installer needs no admin rights: it installs to %LocalAppData%\Tack, registers the
-        # uninstaller, and may launch the app before exiting. It does NOT touch PATH - that is `tack setup`,
-        # below. TACK_SKIP_FIRSTRUN stops the app Setup launches from running that same setup in a separate
-        # console window; we run it here instead, where the user can see the result.
+        # uninstaller, and runs tack's install hook, which puts tack on the USER PATH and stamps the shims.
+        # Nothing here, or anywhere in tack, writes the system PATH.
         #
-        # So do NOT use `Start-Process -Wait`: that waits for the started process *and all its descendants*,
+        # Do NOT use `Start-Process -Wait`: that waits for the started process *and all its descendants*,
         # which can include an app the installer launches, so the one-liner could hang. Waiting on the Setup
         # process's own handle instead returns as soon as the install itself is finished.
         Write-Host 'Running the installer...'
         $psi = [System.Diagnostics.ProcessStartInfo]::new($setup)
         $psi.UseShellExecute = $true   # explicit: the default differs between Windows PowerShell and 7.x
-        $prevSkip = $env:TACK_SKIP_FIRSTRUN
-        $env:TACK_SKIP_FIRSTRUN = '1'   # inherited by Setup and the app it launches
-        try { $proc = [System.Diagnostics.Process]::Start($psi) }
-        finally { $env:TACK_SKIP_FIRSTRUN = $prevSkip }
+        $proc = [System.Diagnostics.Process]::Start($psi)
         if (-not $proc) { throw "Could not start $SetupAsset." }
 
-        # Bounded so a wedged installer (a UAC or antivirus prompt stuck behind another window) reports
+        # Bounded so a wedged installer (an antivirus prompt stuck behind another window) reports
         # something instead of hanging the shell indefinitely.
         if (-not $proc.WaitForExit(10 * 60 * 1000)) {
             $keepWork = $true
@@ -143,25 +139,24 @@ The download has been deleted. Retry; if it keeps failing, report it at $(Get-Re
     }
 
     # --- PATH --------------------------------------------------------------------------------------
-    # tack goes on the SYSTEM PATH only, never the user PATH. That write needs admin, so `tack setup` asks
-    # for it through a single UAC prompt (and does nothing if it's already in place). A declined prompt
-    # leaves tack installed but off PATH; the message below says how to retry.
+    # The install hook has already put tack on the user PATH. `tack setup` repeats that (a no-op when it's in
+    # place) so the result is printed here, where the user can see it. No admin, no UAC prompt.
     $tackExe = Join-Path $env:LOCALAPPDATA 'Tack\current\tack.exe'
     if (-not (Test-Path -LiteralPath $tackExe)) {
-        throw "Installed, but $tackExe is missing, so tack can't be put on the system PATH."
+        throw "Installed, but $tackExe is missing, so tack can't be put on your PATH."
     }
     Write-Host ''
-    Write-Host 'Adding tack to the system PATH (this asks for admin via UAC)...'
+    Write-Host 'Checking tack is on your user PATH...'
     & $tackExe setup
     $setupOk = ($LASTEXITCODE -eq 0)
 
     Write-Host ''
     Write-Host "tack $tag is installed." -ForegroundColor Green
     if ($setupOk) {
-        Write-Host '  Open a NEW terminal (so it picks up the updated PATH) and run:  tack --version' -ForegroundColor DarkGray
+        Write-Host '  Open a NEW terminal (so it picks up the updated PATH) and run:  tack doctor' -ForegroundColor DarkGray
     }
     else {
-        Write-Warning "tack is NOT on the system PATH yet. Retry with:  & '$tackExe' setup"
+        Write-Warning "tack setup reported a problem (above). Retry with:  & '$tackExe' setup"
     }
     Write-Host '  Update later with:  tack update' -ForegroundColor DarkGray
 }

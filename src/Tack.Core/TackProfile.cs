@@ -3,8 +3,8 @@ namespace Tack.Core;
 /// <summary>
 /// Selects the app "profile" so a development instance can run without clobbering an installed release's
 /// data. Dev mode uses a separate data directory (<c>tack (Dev)</c> instead of <c>tack</c>) under
-/// %LOCALAPPDATA% and a separate install root (<c>Program Files\Tack (Dev)</c>, see <see cref="TackPaths"/>),
-/// so a `dotnet run` / `run.bat` build never touches the config, shims or PATH wiring of a real installed tack.
+/// %LOCALAPPDATA%, with its own shims (see <see cref="TackPaths"/>), so a `dotnet run` / `run.bat` build never
+/// touches the config, shims or PATH entries of a real installed tack.
 /// Ported from perch's AppProfile.
 ///
 /// It's on automatically for <b>Debug</b> builds (so local dev is isolated with zero ceremony) and can be
@@ -28,14 +28,14 @@ public static class TackProfile
 
     /// <summary>
     /// The data folder a shim living in <paramref name="shimsDir"/> belongs to: <see cref="DevDataFolder"/> when the
-    /// shims folder sits in one named <c>Tack (Dev)</c> (any case), else <see cref="ReleaseDataFolder"/>. The shim
-    /// uses this instead of <see cref="IsDev"/>: its folder is admin-owned, so the caller can't switch its profile the
-    /// way <c>TACK_DEV</c> could, and a Release-built shim stamped into the dev folder still reads the dev config.
+    /// shims folder sits in one named <c>tack (Dev)</c> (any case), else <see cref="ReleaseDataFolder"/>. The shim
+    /// uses this instead of <see cref="IsDev"/>, so a Release-built shim stamped into the dev folder still reads the
+    /// dev config, and a <c>TACK_DEV</c> left in the environment can't point a release shim at the dev config.
     /// </summary>
     public static string ForShimsDir(string shimsDir)
     {
         string? owner = Path.GetFileName(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(shimsDir)));
-        return string.Equals(owner, TackPaths.Machine.DevInstallFolder, StringComparison.OrdinalIgnoreCase)
+        return string.Equals(owner, DevDataFolder, StringComparison.OrdinalIgnoreCase)
             ? DevDataFolder : ReleaseDataFolder;
     }
 

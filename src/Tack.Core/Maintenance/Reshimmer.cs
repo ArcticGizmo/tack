@@ -16,8 +16,8 @@ public sealed class CompileResult
 
 /// <summary>
 /// The user's half of a reshim: compiles config.json -> resolved.json, which is all a version, zone or setting
-/// change needs. It never touches the shims dir; that's the machine's, written by <see cref="ShimStamper"/> from an
-/// elevated process, and only when the set of names (or the shim build) changes.
+/// change needs. It never touches the shims dir; that's <see cref="ShimStamper"/>'s, and only changes when the set
+/// of names (or the shim build) does.
 /// </summary>
 public static class Reshimmer
 {

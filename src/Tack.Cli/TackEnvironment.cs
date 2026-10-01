@@ -14,12 +14,20 @@ public sealed class TackEnvironment
 {
     public ConfigStore Store { get; } = new();
 
-    /// <summary>The machine's shims dir, wired first onto the system PATH.</summary>
-    public string ShimsDir => TackPaths.Machine.ShimsDir;
+    /// <summary>This profile's shims dir, wired first onto the user PATH.</summary>
+    public string ShimsDir => TackPaths.User.ShimsDir;
 
     public string ResolvedJson => TackPaths.User.ResolvedJson;
     public string ShimLog => TackPaths.User.ShimLog;
     public string InstallDir => AppContext.BaseDirectory;
+
+    /// <summary>This profile's user PATH wiring. Release: shims at the front, tack.exe's dir at the end. Dev: shims
+    /// just behind the release shims (so dev beats every real install but never the release tack), and no install
+    /// dir, since a dev build runs from its build output.</summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public Tack.Core.Platform.WindowsPathInstaller PathInstaller() => TackProfile.IsDev
+        ? new(ShimsDir, installDir: null, behind: new[] { TackPaths.User.ReleaseShimsDir })
+        : new(ShimsDir, InstallDir);
 
     public CentralConfig Load() => Store.Load();
     public void Save(CentralConfig config) => Store.Save(config);

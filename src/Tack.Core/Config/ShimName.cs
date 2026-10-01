@@ -3,9 +3,9 @@ using System.Text.RegularExpressions;
 namespace Tack.Core.Config;
 
 /// <summary>
-/// The command names tack may stamp a shim for. A shim is written as <c>&lt;name&gt;.exe</c> into the admin-owned
-/// shims dir by an elevated process, and the name reaches that process on its command line, so only a plain file
-/// name gets through: a letter or digit, then letters, digits and <c>. _ + -</c>. That rules out separators,
+/// The command names tack may stamp a shim for. A shim is written as <c>&lt;name&gt;.exe</c> into the shims dir,
+/// and the name comes from <c>--exposes</c>, a tool folder's file names or a hand-edited config.json, so only a
+/// plain file name gets through: a letter or digit, then letters, digits and <c>. _ + -</c>. That rules out separators,
 /// <c>..</c>, quotes, spaces and wildcards. Windows device names (<c>con</c>, <c>nul</c>...) and tack's own
 /// executables are refused too.
 /// </summary>

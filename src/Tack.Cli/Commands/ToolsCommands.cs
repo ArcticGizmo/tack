@@ -132,7 +132,7 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
             tool,
             t => Environment.GetEnvironmentVariable("PATH", t),
             // Every tack shims dir (both profiles): a dev instance must not "discover" the release tack's shims.
-            TackPaths.Machine.AllShimsDirs.Append(env.ShimsDir).Append(env.InstallDir),
+            TackPaths.User.AllShimsDirs.Append(env.ShimsDir).Append(env.InstallDir),
             File.Exists);
 
         if (matches.Count == 0)

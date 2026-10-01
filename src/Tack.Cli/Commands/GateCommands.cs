@@ -3,9 +3,8 @@ using Spectre.Console.Cli;
 
 namespace Tack.Cli.Commands;
 
-// Switching tack off and on: a setting compiled into resolved.json, like the invocation log. It only affects the
-// account that runs it, needs no admin, and open shells see it on their next tool call. The shims stay on the
-// system PATH for everyone else.
+// Switching tack off and on: a setting compiled into resolved.json, like the invocation log. It needs no admin,
+// and open shells see it on their next tool call. The shims stay on the user PATH and just pass calls through.
 
 // ---- disable -------------------------------------------------------------------------------------
 

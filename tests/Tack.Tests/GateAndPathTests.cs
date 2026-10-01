@@ -81,8 +81,26 @@ public sealed class PathEditsTests
     public void Register_preserves_env_tokens_of_untouched_entries()
     {
         string expand(string p) => p.Replace("%SystemRoot%", @"C:\WINDOWS", StringComparison.OrdinalIgnoreCase);
-        var result = PathEdits.Register(@"%SystemRoot%\system32;%SystemRoot%", Shims, Install, expand);
+        var result = PathEdits.Register(@"%SystemRoot%\system32;%SystemRoot%", Shims, Install, expand: expand);
         Assert.Equal($@"{Shims};%SystemRoot%\system32;%SystemRoot%;{Install}", result);
+    }
+
+    [Fact]
+    public void Register_without_an_install_dir_only_places_the_shims()
+    {
+        // A dev build runs from its build output, so it puts nothing but its shims on the PATH.
+        Assert.Equal($@"{Shims};C:\Windows", PathEdits.Register(@"C:\Windows", Shims, installDir: null));
+        Assert.Null(PathEdits.Register($@"{Shims};C:\Windows", Shims, installDir: null));
+    }
+
+    [Fact]
+    public void Register_can_place_the_shims_behind_another_dir()
+    {
+        const string release = @"C:\Users\me\AppData\Local\tack\shims";
+        const string dev = @"C:\Users\me\AppData\Local\tack (Dev)\shims";
+        // Dev only ever moves its own entry: wherever the release shims are, it goes directly after them.
+        Assert.Equal($@"C:\scoop\shims;{release};{dev};C:\Windows",
+            PathEdits.Register($@"C:\scoop\shims;{release};C:\Windows", dev, installDir: null, behind: new[] { release }));
     }
 
     [Fact]
@@ -108,7 +126,7 @@ public sealed class PathDoctorDisabledTests : IDisposable
     [Fact]
     public void Reports_disabled_and_still_checks_the_path()
     {
-        // Disabling is a per-user setting now; the shims stay on the system PATH, so their checks still apply.
+        // Disabling is a setting; the shims stay on the user PATH, so their checks still apply.
         string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
         var config = new CentralConfig
         {
@@ -116,7 +134,7 @@ public sealed class PathDoctorDisabledTests : IDisposable
             Settings = { Disabled = true },
         };
 
-        var report = PathDoctor.Run(config, shims, t => t == EnvironmentVariableTarget.Machine ? shims : "");
+        var report = PathDoctor.Run(config, shims, t => t == EnvironmentVariableTarget.User ? shims : "");
 
         Assert.Contains(report.Checks, c => c.Title == "tack is disabled" && c.Status == CheckStatus.Warn);
         Assert.Contains(report.Checks, c => c.Title == "Shims directory is on PATH" && c.Status == CheckStatus.Ok);

@@ -204,7 +204,7 @@ public sealed class ShimStamperTests : IDisposable
     [Fact]
     public void Pending_is_only_missing_names_unless_asked_to_check_the_build()
     {
-        // Every config change runs Pending without the check: it must not want a UAC prompt for a rebuild.
+        // Every config change runs Pending without the check, so it doesn't hash every shim on every change.
         var payload = Payload();
         ShimStamper.Stamp(new[] { "node" }, Shims, payload);
         File.WriteAllText(payload.ShimExe, "SHIM v2");
@@ -393,11 +393,11 @@ public sealed class FirstRunTests : IDisposable
         string resolved = Path.Combine(_root, "resolved.json");
         var path = new FakePathInstaller();
 
-        var result = FirstRun.Apply(path, NodeExposing("node", "npm"), shims, resolved, Payload(), stamp: true);
+        var result = FirstRun.Apply(path, NodeExposing("node", "npm"), shims, resolved, Payload());
 
         Assert.Equal(1, path.Registered);                       // PATH wired
         Assert.True(File.Exists(resolved));                     // resolved.json compiled
-        Assert.Equal(2, result.Stamped!.Written);               // shims stamped for the registered tool
+        Assert.Equal(2, result.Stamped.Written);                // shims stamped for the registered tool
         Assert.True(File.Exists(Path.Combine(shims, "node.exe")));
         Assert.True(File.Exists(Path.Combine(shims, "npm.exe")));
     }
@@ -408,26 +408,26 @@ public sealed class FirstRunTests : IDisposable
         string resolved = Path.Combine(_root, "resolved.json");
         var path = new FakePathInstaller();
 
-        var result = FirstRun.Apply(path, new CentralConfig(), Path.Combine(_root, "shims"), resolved, Payload(), stamp: true);
+        var result = FirstRun.Apply(path, new CentralConfig(), Path.Combine(_root, "shims"), resolved, Payload());
 
         Assert.Equal(1, path.Registered);
         Assert.True(File.Exists(resolved));
-        Assert.Equal(0, result.Stamped!.Written);
+        Assert.Equal(0, result.Stamped.Written);
     }
 
     [Fact]
-    public void Unelevated_compiles_but_leaves_path_and_shims_alone()
+    public void Prunes_shims_the_config_no_longer_lists()
     {
-        // An unelevated install hook can't write the system PATH or the admin-owned shims dir, and must never fall
-        // back to the user PATH: it passes no installer and stamp: false, and `tack setup` does the rest.
+        // The shims dir is this account's own, so a shim nothing in its config needs can simply go.
         string shims = Path.Combine(_root, "shims");
-        string resolved = Path.Combine(_root, "resolved.json");
+        ShimStamper.Stamp(new[] { "node", "yarn" }, shims, Payload());
 
-        var result = FirstRun.Apply(null, NodeExposing("node"), shims, resolved, Payload(), stamp: false);
+        var result = FirstRun.Apply(new FakePathInstaller(), NodeExposing("node"), shims,
+            Path.Combine(_root, "resolved.json"), Payload());
 
-        Assert.True(File.Exists(resolved));
-        Assert.Null(result.Stamped);
-        Assert.False(Directory.Exists(shims));
+        Assert.Equal(new[] { "yarn" }, result.Pruned.Pruned);
+        Assert.True(File.Exists(Path.Combine(shims, "node.exe")));
+        Assert.False(File.Exists(Path.Combine(shims, "yarn.exe")));
     }
 }
 
@@ -468,13 +468,23 @@ public sealed class PathDoctorTests : IDisposable
     {
         string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
 
-        var onSystem = PathDoctor.Run(NodeAt(_root), shims,
-            t => t == EnvironmentVariableTarget.Machine ? $@"C:\first;{shims}" : "");
-        Assert.Contains(onSystem.Checks, c => c.Title == "Shims directory is on PATH" && c.Detail == "system PATH, entry 2");
+        var onUser = PathDoctor.Run(NodeAt(_root), shims,
+            t => t == EnvironmentVariableTarget.User ? $@"C:\first;{shims}" : "");
+        Assert.Contains(onUser.Checks, c => c.Title == "Shims directory is on PATH" && c.Status == CheckStatus.Ok
+            && c.Detail == "user PATH, entry 2");
+    }
 
-        var userOnly = PathDoctor.Run(NodeAt(_root), shims,
-            t => t == EnvironmentVariableTarget.User ? shims : "");
-        Assert.Contains(userOnly.Checks, c => c.Title == "Shims directory is on PATH" && c.Detail.StartsWith("user PATH only"));
+    [Fact]
+    public void Shims_on_the_system_path_fail_even_when_also_on_the_user_path()
+    {
+        // Every account searches the system PATH, and the shims folder is yours to write (the 0.1.x finding).
+        string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
+
+        var report = PathDoctor.Run(NodeAt(_root), shims,
+            t => t == EnvironmentVariableTarget.Machine ? $@"C:\first;{shims}" : shims);
+
+        Assert.Contains(report.Checks, c => c.Title == "Shims directory is on PATH" && c.Status == CheckStatus.Fail
+            && c.Detail.StartsWith("system PATH, entry 2"));
     }
 
     [Fact]

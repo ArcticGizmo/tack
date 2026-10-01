@@ -31,7 +31,7 @@ public static class PathDoctor
     {
         // Shims dirs of any tack instance (both profiles). One of those ahead of us isn't a rogue install - it's
         // the release tack in front of a dev one - so it's reported as a hand-over hint, not per-tool shadowing.
-        var tackDirs = new HashSet<string>((tackShimsDirs ?? TackPaths.Machine.AllShimsDirs).Select(Norm));
+        var tackDirs = new HashSet<string>((tackShimsDirs ?? TackPaths.User.AllShimsDirs).Select(Norm));
         fileExists ??= File.Exists;
         dirExists ??= Directory.Exists;
 
@@ -53,9 +53,14 @@ public static class PathDoctor
             .ToList();
         int shimsIndex = effective.FindIndex(p => Norm(p) == shims);
 
-        report.Add("Shims directory is on PATH",
-            shimsIndex >= 0 ? CheckStatus.Ok : CheckStatus.Fail,
-            shimsIndex >= 0 ? WherePlaced(getPath, shims) : "not on PATH - tack won't intercept tool calls");
+        if (shimsIndex < 0)
+            report.Add("Shims directory is on PATH", CheckStatus.Fail,
+                "not on PATH - tack won't intercept tool calls; run 'tack setup'");
+        else
+        {
+            var (status, where) = WherePlaced(getPath, shims);
+            report.Add("Shims directory is on PATH", status, where);
+        }
 
         // Shadowing: an earlier PATH dir that already provides a shimmed binary wins over the shim.
         if (shimsIndex >= 0)
@@ -95,7 +100,7 @@ public static class PathDoctor
         if (dirExists(shimsDir))
             foreach (var name in ShimStamper.Stale(names, shimsDir))
                 report.Add($"Stale shim '{name}'", CheckStatus.Warn,
-                    "not in your config; it only passes calls through - tack doctor --fix offers to remove it");
+                    "not in your config; it only passes calls through - tack doctor --fix removes it");
 
         foreach (var bad in ShimName.Invalid(config))
             report.Add("Invalid command name", CheckStatus.Fail, $"{bad}; it's never intercepted - fix it in config.json");
@@ -118,16 +123,19 @@ public static class PathDoctor
         return report;
     }
 
-    /// <summary>Say exactly which PATH holds the shims dir, and where: "system PATH, entry 2". A user-PATH-only
-    /// placement gets a plain-English caveat, since Windows searches the whole system PATH first.</summary>
-    private static string WherePlaced(Func<EnvironmentVariableTarget, string?> getPath, string shims)
+    /// <summary>Say exactly which PATH holds the shims dir, and where: "user PATH, entry 1". On the system PATH it's
+    /// a failure, wherever it also is: every account searches the system PATH, and this folder is yours to write,
+    /// which is the critical 0.1.x finding (ADR 0002). tack won't write the system PATH even to take itself off.</summary>
+    private static (CheckStatus, string) WherePlaced(Func<EnvironmentVariableTarget, string?> getPath, string shims)
     {
         int machine = Split(getPath(EnvironmentVariableTarget.Machine)).FindIndex(p => Norm(p) == shims);
-        if (machine >= 0) return $"system PATH, entry {machine + 1}";
+        if (machine >= 0)
+            return (CheckStatus.Fail,
+                $"system PATH, entry {machine + 1} - every account on this machine searches it, and you can write this folder; " +
+                "remove it from the system PATH (needs admin), then run 'tack setup'");
 
         int user = Split(getPath(EnvironmentVariableTarget.User)).FindIndex(p => Norm(p) == shims);
-        return $"user PATH only (entry {user + 1}) - anything on the system PATH is found first; " +
-               "'tack doctor --fix' moves it onto the system PATH";
+        return (CheckStatus.Ok, $"user PATH, entry {user + 1}");
     }
 
     private static List<string> Split(string? p) => string.IsNullOrEmpty(p)

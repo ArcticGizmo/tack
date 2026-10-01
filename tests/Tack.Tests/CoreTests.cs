@@ -17,28 +17,25 @@ public class CoreTests
     }
 
     [Fact]
-    public void Machine_paths_are_rooted_at_the_install()
+    public void Shims_and_backups_live_in_the_data_folder()
     {
-        // A release build finds its install from where it runs (Velopack's <root>\current\); a dev build runs
-        // from build output, so it has a fixed Program Files root instead.
-        string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        string root = TackProfile.IsDev
-            ? Path.Combine(programFiles, "Tack (Dev)")
-            : Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory))!;
+        // Nothing tack keeps lives anywhere but this account's %LOCALAPPDATA% (ADR 0002).
+        string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        string root = TackPaths.User.Root;
 
-        Assert.Equal(root, TackPaths.Machine.Root);
-        Assert.Equal(Path.Combine(root, "shims"), TackPaths.Machine.ShimsDir);
-        Assert.Equal(Path.Combine(root, "path-backups"), TackPaths.Machine.PathBackupsDir);
-        Assert.Equal(Path.Combine(programFiles, "Tack", "shims"), TackPaths.Machine.ReleaseShimsDir);
-        if (TackProfile.IsDev) Assert.Contains(TackPaths.Machine.ShimsDir, TackPaths.Machine.AllShimsDirs);
+        Assert.Equal(Path.Combine(root, "shims"), TackPaths.User.ShimsDir);
+        Assert.Equal(Path.Combine(root, "path-backups"), TackPaths.User.PathBackupsDir);
+        Assert.Equal(Path.Combine(local, "tack", "shims"), TackPaths.User.ReleaseShimsDir);
+        Assert.Contains(TackPaths.User.ShimsDir, TackPaths.User.AllShimsDirs);
     }
 
     [Fact]
-    public void Each_install_shims_dir_maps_back_to_its_own_data_folder()
+    public void Each_shims_dir_maps_back_to_its_own_data_folder()
     {
         // What the shim relies on: the profile it derives from its folder is the one whose config the CLI writes.
-        foreach (var dir in TackPaths.Machine.AllShimsDirs)
+        foreach (var dir in TackPaths.User.AllShimsDirs)
             Assert.Equal(dir.Contains("(Dev)") ? "tack (Dev)" : "tack", TackProfile.ForShimsDir(dir));
+        Assert.Equal(TackProfile.DataFolderName, TackProfile.ForShimsDir(TackPaths.User.ShimsDir));
     }
 
     [Fact]
@@ -52,13 +49,13 @@ public class CoreTests
     }
 
     [Theory]
-    [InlineData(@"C:\Program Files\Tack (Dev)\shims\", "tack (Dev)")]
-    [InlineData(@"C:\Program Files\Tack (Dev)\shims", "tack (Dev)")]
-    [InlineData(@"C:\Users\someone\AppData\Local\tack (Dev)\shims\", "tack (Dev)")] // case doesn't matter
-    [InlineData(@"C:\Program Files\Tack\shims\", "tack")]
+    [InlineData(@"C:\Users\someone\AppData\Local\tack (Dev)\shims\", "tack (Dev)")]
+    [InlineData(@"C:\Users\someone\AppData\Local\tack (Dev)\shims", "tack (Dev)")]
+    [InlineData(@"C:\Users\someone\AppData\Local\Tack (DEV)\shims\", "tack (Dev)")] // case doesn't matter
+    [InlineData(@"C:\Users\someone\AppData\Local\Tack\shims\", "tack")]
     [InlineData(@"C:\Users\someone\AppData\Local\tack\shims\", "tack")]
-    [InlineData(@"C:\Program Files\Tack (Dev) old\shims\", "tack")]                  // only an exact name
-    [InlineData(@"C:\Program Files\Tack (Dev)\", "tack")]                            // the folder itself, not its parent
+    [InlineData(@"C:\Users\someone\AppData\Local\tack (Dev) old\shims\", "tack")]   // only an exact name
+    [InlineData(@"C:\Users\someone\AppData\Local\tack (Dev)\", "tack")]             // the folder itself, not its parent
     [InlineData(@"C:\", "tack")]
     public void A_shim_takes_its_profile_from_the_folder_its_shims_folder_is_in(string shimsDir, string expected)
     {
