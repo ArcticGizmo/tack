@@ -4,6 +4,7 @@ using Spectre.Console;
 using Spectre.Console.Cli;
 using Tack.Core;
 using Tack.Core.Maintenance;
+using Tack.Core.Resolution;
 
 namespace Tack.Cli.Commands;
 
@@ -32,8 +33,7 @@ public sealed class DoctorCommand : Command<DoctorSettings>
             AnsiConsole.WriteLine();
         }
 
-        var report = PathDoctor.Run(env.Load(), env.ShimsDir,
-            t => Environment.GetEnvironmentVariable("PATH", t));
+        var report = PathDoctor.Run(env.Load(), env.ShimsDir, CommandSearch.Current());
 
         foreach (var check in report.Checks)
         {

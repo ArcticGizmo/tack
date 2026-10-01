@@ -84,14 +84,27 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
             return 1;
         }
 
+        // Windows' own commands (curl, tar, where...) can't be taken over: they can't be moved off the system PATH,
+        // and programs that start them directly never look at PATH. A name asked for explicitly is an error.
+        var search = OperatingSystem.IsWindows() ? CommandSearch.Current() : null;
+        foreach (var name in settings.ExposesList.Prepend(spec.Tool))
+        {
+            if (search?.WindowsOwner(name) is not { } windows) continue;
+            AnsiConsole.MarkupLine($"[red]'{Markup.Escape(name)}' is a Windows command[/] [grey]({Markup.Escape(windows)})[/], so tack can't intercept it.");
+            return 1;
+        }
+
         var exposes = settings.ExposesList;
         if (exposes.Count == 0)
         {
             // Detected names are whatever files the folder holds; skip the ones that can't be commands.
             exposes = ToolProbe.DetectExposes(binDir);
-            foreach (var name in exposes.Where(n => !ShimName.IsValid(n)).ToList())
+            foreach (var name in exposes.ToList())
             {
-                AnsiConsole.MarkupLine($"[yellow]skipping '{Markup.Escape(name)}':[/] [grey]{Markup.Escape(ShimName.Problem(name)!)}[/]");
+                string? why = ShimName.Problem(name)
+                    ?? (search?.WindowsOwner(name) is { } windows ? $"a Windows command ({windows})" : null);
+                if (why is null) continue;
+                AnsiConsole.MarkupLine($"[yellow]skipping '{Markup.Escape(name)}':[/] [grey]{Markup.Escape(why)}[/]");
                 exposes.Remove(name);
             }
         }
@@ -119,6 +132,8 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
             AnsiConsole.MarkupLine("[yellow]note:[/] tack is disabled - this is configured but won't take effect until [green]tack enable[/].");
         else if (!Render.OnPath(env.ShimsDir))
             AnsiConsole.MarkupLine($"[yellow]note:[/] the shims dir is not on PATH yet - installing tack wires it up, or run [green]{Shims.RepairCommand}[/].");
+        else if (search is not null)
+            Render.Shadows(exposes.Select(n => search.Explain(n, env.ShimsDir, TackPaths.User.AllShimsDirs)));
         return 0;
     }
 

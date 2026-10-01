@@ -445,53 +445,57 @@ public sealed class PathDoctorTests : IDisposable
     public void Flags_shims_dir_not_on_path()
     {
         string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
-        var report = PathDoctor.Run(NodeAt(_root), shims, _ => "");
-        Assert.Contains(report.Checks, c => c.Title == "Shims directory is on PATH" && c.Status == CheckStatus.Fail);
+        var report = PathDoctor.Run(NodeAt(_root), shims, FakeSearch.Of(null, null));
+        Assert.Contains(report.Checks, c => c.Title == "Shims directory is on your user PATH" && c.Status == CheckStatus.Fail);
     }
 
     [Fact]
-    public void Flags_a_shadowing_dir_ahead_of_the_shims()
+    public void Flags_a_system_path_install_that_wins_over_the_shims()
     {
         string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
-        string other = Directory.CreateDirectory(Path.Combine(_root, "realnode")).FullName;
-        File.WriteAllText(Path.Combine(other, "node.exe"), ""); // a real node ahead of the shims
+        const string nodejs = @"C:\Program Files\nodejs";
 
-        // machine PATH = other (ahead), user PATH = shims (behind)
+        var report = PathDoctor.Run(NodeAt(_root), shims, FakeSearch.Of(nodejs, shims, $@"{nodejs}\node.exe"));
+
+        var check = Assert.Single(report.Checks, c => c.Title == "'node' isn't intercepted");
+        Assert.Equal(CheckStatus.Warn, check.Status);
+        Assert.Contains("system PATH entry 1", check.Detail);
+    }
+
+    [Fact]
+    public void Says_where_on_the_user_path_the_shims_dir_is()
+    {
+        string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
+
+        var report = PathDoctor.Run(NodeAt(_root), shims, FakeSearch.Of(null, $@"C:\first;{shims}"));
+
+        Assert.Contains(report.Checks, c => c.Title == "Shims directory is on your user PATH" && c.Status == CheckStatus.Ok
+            && c.Detail == "entry 2");
+    }
+
+    [Fact]
+    public void Any_tack_folder_on_the_system_path_fails()
+    {
+        // Every account searches the system PATH, and tack's folders are yours to write (the 0.1.x finding). That
+        // includes another profile's, and the Program Files ones the per-machine experiment wired up.
+        string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
+        const string old = @"C:\Program Files\Tack (Dev)\shims";
+
         var report = PathDoctor.Run(NodeAt(_root), shims,
-            t => t == EnvironmentVariableTarget.Machine ? other : shims);
+            FakeSearch.Of($@"C:\first;{shims};{old}", shims), everWired: new[] { old });
 
-        Assert.Contains(report.Checks, c => c.Title == "'node' is shadowed" && c.Status == CheckStatus.Warn);
-    }
-
-    [Fact]
-    public void Says_which_path_holds_the_shims_dir()
-    {
-        string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
-
-        var onUser = PathDoctor.Run(NodeAt(_root), shims,
-            t => t == EnvironmentVariableTarget.User ? $@"C:\first;{shims}" : "");
-        Assert.Contains(onUser.Checks, c => c.Title == "Shims directory is on PATH" && c.Status == CheckStatus.Ok
-            && c.Detail == "user PATH, entry 2");
-    }
-
-    [Fact]
-    public void Shims_on_the_system_path_fail_even_when_also_on_the_user_path()
-    {
-        // Every account searches the system PATH, and the shims folder is yours to write (the 0.1.x finding).
-        string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
-
-        var report = PathDoctor.Run(NodeAt(_root), shims,
-            t => t == EnvironmentVariableTarget.Machine ? $@"C:\first;{shims}" : shims);
-
-        Assert.Contains(report.Checks, c => c.Title == "Shims directory is on PATH" && c.Status == CheckStatus.Fail
-            && c.Detail.StartsWith("system PATH, entry 2"));
+        var fails = report.Checks.Where(c => c.Title == "tack folder on the system PATH").ToList();
+        Assert.Equal(2, fails.Count);
+        Assert.All(fails, c => Assert.Equal(CheckStatus.Fail, c.Status));
+        Assert.Contains(fails, c => c.Detail.StartsWith($"{shims} (system PATH entry 2)"));
+        Assert.Contains(fails, c => c.Detail.StartsWith($"{old} (system PATH entry 3)"));
     }
 
     [Fact]
     public void Flags_a_missing_bindir()
     {
         string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
-        var report = PathDoctor.Run(NodeAt(Path.Combine(_root, "ghost")), shims, _ => shims);
+        var report = PathDoctor.Run(NodeAt(Path.Combine(_root, "ghost")), shims, FakeSearch.Of(null, shims));
         Assert.Contains(report.Checks, c => c.Title.StartsWith("Missing binDir") && c.Status == CheckStatus.Fail);
     }
 
@@ -504,7 +508,7 @@ public sealed class PathDoctorTests : IDisposable
         var config = NodeAt(_root);
         config.Tools["node"].Versions["1"].Exposes.Add("bad name");
 
-        var report = PathDoctor.Run(config, shims, _ => shims);
+        var report = PathDoctor.Run(config, shims, FakeSearch.Of(null, shims));
 
         Assert.Contains(report.Checks, c => c.Title == "Stale shim 'yarn'" && c.Status == CheckStatus.Warn);
         Assert.DoesNotContain(report.Checks, c => c.Title == "Stale shim 'node'");

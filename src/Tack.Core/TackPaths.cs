@@ -39,7 +39,27 @@ public static class TackPaths
             Path.Combine(DataRoot(TackProfile.DevDataFolder), "shims"),
         };
 
-        private static string DataRoot(string folder) =>
+        internal static string DataRoot(string folder) =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), folder);
+    }
+
+    /// <summary>
+    /// Every folder any tack build has put on a PATH: both profiles' shims, the release install's <c>current\</c>,
+    /// and the Program Files folders from the per-machine experiment (M9). None of them belongs on the system PATH,
+    /// and tack never writes it, so <c>doctor</c> reports any it finds there for you to remove (ADR 0002).
+    /// </summary>
+    public static IReadOnlyList<string> EverWired
+    {
+        get
+        {
+            string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            return User.AllShimsDirs.Concat(new[]
+            {
+                Path.Combine(User.DataRoot(TackProfile.ReleaseDataFolder), "current"),
+                Path.Combine(programFiles, "Tack", "shims"),
+                Path.Combine(programFiles, "Tack", "current"),
+                Path.Combine(programFiles, "Tack (Dev)", "shims"),
+            }).ToList();
+        }
     }
 }

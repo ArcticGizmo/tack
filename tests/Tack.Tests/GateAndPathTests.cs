@@ -134,17 +134,17 @@ public sealed class PathDoctorDisabledTests : IDisposable
             Settings = { Disabled = true },
         };
 
-        var report = PathDoctor.Run(config, shims, t => t == EnvironmentVariableTarget.User ? shims : "");
+        var report = PathDoctor.Run(config, shims, FakeSearch.Of(null, shims));
 
         Assert.Contains(report.Checks, c => c.Title == "tack is disabled" && c.Status == CheckStatus.Warn);
-        Assert.Contains(report.Checks, c => c.Title == "Shims directory is on PATH" && c.Status == CheckStatus.Ok);
+        Assert.Contains(report.Checks, c => c.Title == "Shims directory is on your user PATH" && c.Status == CheckStatus.Ok);
     }
 
     [Fact]
     public void Enabled_config_reports_no_disabled_warning()
     {
         string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
-        var report = PathDoctor.Run(new CentralConfig(), shims, _ => shims);
+        var report = PathDoctor.Run(new CentralConfig(), shims, FakeSearch.Of(null, shims));
         Assert.DoesNotContain(report.Checks, c => c.Title == "tack is disabled");
     }
 }
@@ -223,10 +223,10 @@ public sealed class DevBehindReleaseTests : IDisposable
         };
 
         var report = PathDoctor.Run(config, dev,
-            t => t == EnvironmentVariableTarget.User ? $"{release};{dev}" : "",
+            FakeSearch.Of(null, $"{release};{dev}", Path.Combine(release, "node.exe")),
             tackShimsDirs: new[] { release, dev });
 
         Assert.Contains(report.Checks, c => c.Title == "Behind another tack instance" && c.Detail.Contains("node"));
-        Assert.DoesNotContain(report.Checks, c => c.Title == "'node' is shadowed");
+        Assert.DoesNotContain(report.Checks, c => c.Title == "'node' isn't intercepted");
     }
 }

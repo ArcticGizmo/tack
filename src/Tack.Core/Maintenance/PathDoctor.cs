@@ -15,31 +15,37 @@ public sealed class DoctorReport
 }
 
 /// <summary>
-/// Diagnoses the health of tack's PATH wiring (scope plan sections 5.4 + 10): is the shims dir on PATH,
-/// is it shadowed by another tool install ahead of it (nvm-windows, a standalone Node), are there stale
-/// shims, and do any registered versions point at a missing binDir. PATH access is injected for testability.
+/// Diagnoses the health of tack's PATH wiring (scope plan sections 5.4 + 10, ADR 0002): is the shims dir on the
+/// user PATH, is any tack folder on the system PATH (where every account would search a folder you can write), which
+/// commands won't reach the shims because something ahead of them on PATH provides them, are there stale shims, and
+/// do any registered versions point at a missing binDir. The command search is injected for testability.
 /// </summary>
 public static class PathDoctor
 {
+    /// <summary>How to take an entry off the system PATH. Spelled out rather than done: tack never writes the system
+    /// PATH, and the Environment Variables dialog keeps the value's %VAR% tokens (setx would flatten them).</summary>
+    public const string RemoveFromSystemPath =
+        "remove it under System variables > Path in the Environment Variables dialog (run SystemPropertiesAdvanced.exe " +
+        "from an admin shell, then Environment Variables)";
+
     public static DoctorReport Run(
         CentralConfig config,
         string shimsDir,
-        Func<EnvironmentVariableTarget, string?> getPath,
-        Func<string, bool>? fileExists = null,
+        CommandSearch search,
         Func<string, bool>? dirExists = null,
-        IEnumerable<string>? tackShimsDirs = null)
+        IEnumerable<string>? tackShimsDirs = null,
+        IEnumerable<string>? everWired = null)
     {
         // Shims dirs of any tack instance (both profiles). One of those ahead of us isn't a rogue install - it's
         // the release tack in front of a dev one - so it's reported as a hand-over hint, not per-tool shadowing.
-        var tackDirs = new HashSet<string>((tackShimsDirs ?? TackPaths.User.AllShimsDirs).Select(Norm));
-        fileExists ??= File.Exists;
+        var tackDirs = (tackShimsDirs ?? TackPaths.User.AllShimsDirs).ToList();
         dirExists ??= Directory.Exists;
 
         var report = new DoctorReport();
-        string shims = Norm(shimsDir);
+        string shims = PathKey.Of(shimsDir);
         var names = ShimName.Exposed(config);
 
-        // `tack disable` is a per-user setting: the shims stay on PATH, so every other check still applies.
+        // `tack disable` is a setting: the shims stay on PATH, so every other check still applies.
         if (config.Settings.Disabled)
             report.Add("tack is disabled", CheckStatus.Warn,
                 "your tool calls pass straight through; run 'tack enable' to turn it back on");
@@ -47,44 +53,35 @@ public static class PathDoctor
         report.Add("Shims directory exists",
             dirExists(shimsDir) ? CheckStatus.Ok : CheckStatus.Warn, shimsDir);
 
-        // Effective resolution order on Windows: machine PATH entries, then user PATH entries.
-        var effective = Split(getPath(EnvironmentVariableTarget.Machine))
-            .Concat(Split(getPath(EnvironmentVariableTarget.User)))
-            .ToList();
-        int shimsIndex = effective.FindIndex(p => Norm(p) == shims);
+        var onUserPath = search.Entries.FirstOrDefault(e => e.Scope == PathScope.User && PathKey.Of(e.Dir) == shims);
+        report.Add("Shims directory is on your user PATH",
+            onUserPath is not null ? CheckStatus.Ok : CheckStatus.Fail,
+            onUserPath is not null ? $"entry {onUserPath.Position}" : "not on it - tack won't intercept tool calls; run 'tack setup'");
 
-        if (shimsIndex < 0)
-            report.Add("Shims directory is on PATH", CheckStatus.Fail,
-                "not on PATH - tack won't intercept tool calls; run 'tack setup'");
-        else
-        {
-            var (status, where) = WherePlaced(getPath, shims);
-            report.Add("Shims directory is on PATH", status, where);
-        }
+        // Every account searches the system PATH, and these folders are yours to write: the critical 0.1.x finding.
+        var wired = new HashSet<string>((everWired ?? TackPaths.EverWired).Append(shimsDir).Select(PathKey.Of));
+        foreach (var entry in search.Entries.Where(e => e.Scope == PathScope.System && wired.Contains(PathKey.Of(e.Dir))))
+            report.Add("tack folder on the system PATH", CheckStatus.Fail,
+                $"{entry.Raw} ({entry.Where}): every account on this machine searches the system PATH, and tack's " +
+                $"folders are writable by you, so it doesn't belong there; {RemoveFromSystemPath}");
 
-        // Shadowing: an earlier PATH dir that already provides a shimmed binary wins over the shim.
-        if (shimsIndex >= 0)
+        // Commands that won't reach the shims: something ahead of them on PATH provides the same name.
+        if (onUserPath is not null)
         {
             var byOtherTack = new SortedDictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             foreach (var name in names)
             {
-                for (int i = 0; i < shimsIndex; i++)
+                if (search.Explain(name, shimsDir, tackDirs) is not { } shadow) continue;
+                if (shadow.Kind == ShadowKind.OtherTack)
                 {
-                    if (BinaryLocator.Locate(effective[i], name, fileExists) is not null)
-                    {
-                        if (tackDirs.Contains(Norm(effective[i])))
-                        {
-                            if (!byOtherTack.TryGetValue(effective[i], out var list))
-                                byOtherTack[effective[i]] = list = new List<string>();
-                            list.Add(name);
-                        }
-                        else
-                        {
-                            report.Add($"'{name}' is shadowed", CheckStatus.Warn,
-                                $"{effective[i]} precedes the shims dir on PATH");
-                        }
-                        break;
-                    }
+                    string dir = shadow.Winner.Entry.Dir;
+                    if (!byOtherTack.TryGetValue(dir, out var list))
+                        byOtherTack[dir] = list = new List<string>();
+                    list.Add(name);
+                }
+                else
+                {
+                    report.Add($"'{name}' isn't intercepted", CheckStatus.Warn, shadow.Advice);
                 }
             }
 
@@ -96,7 +93,7 @@ public static class PathDoctor
                     "run 'tack disable' on that instance to hand them over (fine to ignore if it's already disabled)");
         }
 
-        // Stale shims: harmless (they pass straight through), and possibly another account's.
+        // Stale shims: harmless (they pass straight through), and normally pruned by the next config change.
         if (dirExists(shimsDir))
             foreach (var name in ShimStamper.Stale(names, shimsDir))
                 report.Add($"Stale shim '{name}'", CheckStatus.Warn,
@@ -121,30 +118,5 @@ public static class PathDoctor
             report.Add("No tools registered", CheckStatus.Warn, "use 'tack tool add' to add an install");
 
         return report;
-    }
-
-    /// <summary>Say exactly which PATH holds the shims dir, and where: "user PATH, entry 1". On the system PATH it's
-    /// a failure, wherever it also is: every account searches the system PATH, and this folder is yours to write,
-    /// which is the critical 0.1.x finding (ADR 0002). tack won't write the system PATH even to take itself off.</summary>
-    private static (CheckStatus, string) WherePlaced(Func<EnvironmentVariableTarget, string?> getPath, string shims)
-    {
-        int machine = Split(getPath(EnvironmentVariableTarget.Machine)).FindIndex(p => Norm(p) == shims);
-        if (machine >= 0)
-            return (CheckStatus.Fail,
-                $"system PATH, entry {machine + 1} - every account on this machine searches it, and you can write this folder; " +
-                "remove it from the system PATH (needs admin), then run 'tack setup'");
-
-        int user = Split(getPath(EnvironmentVariableTarget.User)).FindIndex(p => Norm(p) == shims);
-        return (CheckStatus.Ok, $"user PATH, entry {user + 1}");
-    }
-
-    private static List<string> Split(string? p) => string.IsNullOrEmpty(p)
-        ? new List<string>()
-        : p.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-
-    private static string Norm(string p)
-    {
-        try { return Path.GetFullPath(p).TrimEnd('\\', '/').ToLowerInvariant(); }
-        catch { return p.TrimEnd('\\', '/').ToLowerInvariant(); }
     }
 }
