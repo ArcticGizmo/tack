@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- tack moves off the system PATH and onto your user PATH, where nobody else can trip over it
+- So SYSTEM, services and other accounts can no longer be talked into running something from your profile
+- No admin and no UAC prompts, for anything, ever
+- Commands a system-wide install gets to first are now called out by name, with what to do about it
+- Windows' own `curl` and friends are politely declined
+- `tack doctor` checks nobody else can write tack's folders, and fails if any tack folder is still on the system PATH
+- `tack setup --remove` takes tack back off your PATH; removing a tool now takes its shims with it
+
 ---
 
 ## [v0.1.7] - 2026-09-29

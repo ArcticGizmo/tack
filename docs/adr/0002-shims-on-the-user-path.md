@@ -159,7 +159,8 @@ by Administrator Protection. T11 to T13 and T16 don't depend on PATH placement.
 - **Kept:** phases 1 to 3 (the shim reads only its own account's config; disable is a per-user setting;
   compiling is separate from stamping). Stamping becomes unelevated.
 - **Dropped:** phases 4 to 6 (elevated commands, MSI hooks, elevated updates, per-machine MSI packaging) and
-  decisions D2, D5, D7, D8 and D9. Per-user `Setup.exe` comes back. The MSI spike's findings are no longer needed.
+  decisions D2, D3, D5, D7, D8 and D9. Releases keep the per-user `Setup.exe` (M9's packaging phase never
+  landed). The MSI spike's findings are no longer needed.
 - **Changed:** `WindowsEnvRegistry` swaps its machine-scope write for a user-scope one. Install and `tack setup`
   add the user PATH entries, and uninstall removes them. There's still no migration (D4): `doctor` reports
   leftover 0.1.x tack entries on the system PATH and gives the command to remove them, which needs admin.
@@ -167,4 +168,4 @@ by Administrator Protection. T11 to T13 and T16 don't depend on PATH placement.
 - **To verify in the end-to-end check:** scheduled tasks that run as you, and IDEs launched from the Start menu,
   pick up the user PATH entry. That's expected, as for any per-user tool, but it hasn't been checked for tack.
 
-A replacement for the M9 plan from phase 4 onwards is still to be written.
+The replacement for the M9 plan from phase 4 onwards is [docs/user-path-plan.md](../user-path-plan.md).

@@ -4,7 +4,8 @@
 
 > **Superseded from phase 4 onwards (2026-10-01)** by [ADR 0002](adr/0002-shims-on-the-user-path.md): shims go on
 > the user PATH and nothing goes on the system PATH. Phases 1 to 3 stand, with stamping now unelevated. Phases 4
-> to 6 and decisions D2, D5, D7, D8 and D9 are dropped. A replacement plan is still to be written.
+> to 6 and decisions D2, D3, D5, D7, D8 and D9 are dropped. The replacement is
+> [docs/user-path-plan.md](user-path-plan.md).
 
 tack is still greenfield, so this plan **breaks things freely**. There's no migration from the per-user install, no
 compatibility with old config layouts, and no second install route kept alive "just in case". The evidence for

@@ -23,11 +23,11 @@ The attacker is a malicious program running as the tack user, at normal (non-adm
 
 | # | Severity | Finding | Status |
 |---|---|---|---|
-| 1 | Critical | A user-writable folder is first on the system PATH | confirmed on a real machine |
+| 1 | Critical | A user-writable folder is first on the system PATH | **fixed** by [ADR 0002](adr/0002-shims-on-the-user-path.md): nothing on the system PATH (manual end-to-end check pending) |
 | 2 | High | `.cmd` targets allow command injection and break on quoted paths | **fixed** (confirmed with the shim) |
-| 3 | Medium | Elevated tack writes and deletes inside user-writable folders (junction attacks) | from code |
-| 4 | Medium | `apply-machine-path` accepts any folder without checking it | from code |
-| 5 | Medium | Auto-detected commands can take over unrelated system commands | from code |
+| 3 | Medium | Elevated tack writes and deletes inside user-writable folders (junction attacks) | **gone**: tack has no elevated code (ADR 0002) |
+| 4 | Medium | `apply-machine-path` accepts any folder without checking it | **gone**: the command was deleted, along with every UAC relaunch |
+| 5 | Medium | Auto-detected commands can take over unrelated system commands | **mostly fixed**: shims on the user PATH can't get ahead of System32, and Windows' own names are refused or skipped. Two tools exposing the same name still isn't reported. |
 | 6 | Low | Environment-variable overrides are honoured in release builds | from code |
 | 7 | Low | Enforced zones are easy to bypass | from code |
 | 8 | Low | A repo's `tack.yml` can pick versions that carry environment variables | from code |
@@ -140,6 +140,10 @@ PATH too, so where the shims live doesn't change what reaches your elevated sess
 same-account trust every per-user tool relies on. The boundary that matters is (a) and (b): other accounts and
 SYSTEM. Putting nothing on the system PATH closes both without a per-machine install or any elevated code. A name
 that something on the system PATH already provides isn't intercepted, and tack reports it instead.
+
+Implemented 2026-10-01 ([plan](user-path-plan.md), phases 1 to 3). The shim already read only its own account's
+config, which closes (b) and (d). `tack doctor` fails if any tack folder is still on the system PATH, since tack
+won't write the system PATH even to clean up after 0.1.x.
 
 **Separate gap:** nothing can take the **dev** entry off the system PATH. Only the uninstall hook calls `Unregister` (`src/Tack.Cli/InstallHook.cs:94`), and it only removes the release profile's folder. After `run.bat doctor --fix`, `tack (Dev)\shims` stays on the system PATH for good. Add a way to remove it, for example `tack doctor --unwire`.
 
