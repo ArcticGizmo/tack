@@ -492,6 +492,32 @@ public sealed class PathDoctorTests : IDisposable
     }
 
     [Fact]
+    public void Fails_when_another_account_can_write_a_tack_folder()
+    {
+        string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
+        const string shared = @"\\server\redirected\tack";
+
+        var report = PathDoctor.Run(NodeAt(_root), shims, FakeSearch.Of(null, shims),
+            ownFolders: new[] { shims, shared },
+            otherWriters: d => d == shared ? new List<string> { @"BUILTIN\Users" } : new List<string>());
+
+        var check = Assert.Single(report.Checks, c => c.Title == "Others can write tack's folders");
+        Assert.Equal(CheckStatus.Fail, check.Status);
+        Assert.StartsWith($@"{shared}: BUILTIN\Users can add files there", check.Detail);
+    }
+
+    [Fact]
+    public void Unreadable_permissions_are_a_warning_not_a_pass()
+    {
+        string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
+
+        var report = PathDoctor.Run(NodeAt(_root), shims, FakeSearch.Of(null, shims),
+            ownFolders: new[] { shims }, otherWriters: _ => null);
+
+        Assert.Contains(report.Checks, c => c.Title == "Who can write tack's folders" && c.Status == CheckStatus.Warn);
+    }
+
+    [Fact]
     public void Flags_a_missing_bindir()
     {
         string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;

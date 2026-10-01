@@ -33,7 +33,8 @@ public sealed class DoctorCommand : Command<DoctorSettings>
             AnsiConsole.WriteLine();
         }
 
-        var report = PathDoctor.Run(env.Load(), env.ShimsDir, CommandSearch.Current());
+        var report = PathDoctor.Run(env.Load(), env.ShimsDir, CommandSearch.Current(),
+            ownFolders: new[] { env.ShimsDir, TackPaths.User.Root, env.InstallDir });
 
         foreach (var check in report.Checks)
         {

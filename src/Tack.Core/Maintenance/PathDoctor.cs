@@ -34,7 +34,9 @@ public static class PathDoctor
         CommandSearch search,
         Func<string, bool>? dirExists = null,
         IEnumerable<string>? tackShimsDirs = null,
-        IEnumerable<string>? everWired = null)
+        IEnumerable<string>? everWired = null,
+        IEnumerable<string>? ownFolders = null,
+        Func<string, List<string>?>? otherWriters = null)
     {
         // Shims dirs of any tack instance (both profiles). One of those ahead of us isn't a rogue install - it's
         // the release tack in front of a dev one - so it's reported as a hand-over hint, not per-tool shadowing.
@@ -64,6 +66,28 @@ public static class PathDoctor
             report.Add("tack folder on the system PATH", CheckStatus.Fail,
                 $"{entry.Raw} ({entry.Where}): every account on this machine searches the system PATH, and tack's " +
                 $"folders are writable by you, so it doesn't belong there; {RemoveFromSystemPath}");
+
+        // Whoever else can write tack's folders gets their code run in your sessions: the shims and tack.exe are on
+        // your PATH, and the shims read the config here.
+        if (ownFolders is not null && (otherWriters ?? DefaultOtherWriters) is { } writersOf)
+        {
+            var folders = ownFolders.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            bool clean = true;
+            foreach (var folder in folders)
+            {
+                var writers = writersOf(folder);
+                if (writers is { Count: 0 }) continue;
+                clean = false;
+                if (writers is null)
+                    report.Add("Who can write tack's folders", CheckStatus.Warn, $"{folder}: couldn't read its permissions");
+                else
+                    report.Add("Others can write tack's folders", CheckStatus.Fail,
+                        $"{folder}: {string.Join(", ", writers)} can add files there, so their code would run in your " +
+                        "sessions; take that access away (only you, SYSTEM and Administrators need it)");
+            }
+            if (clean)
+                report.Add("Only you can write tack's folders", CheckStatus.Ok, $"{folders.Count} checked");
+        }
 
         // Commands that won't reach the shims: something ahead of them on PATH provides the same name.
         if (onUserPath is not null)
@@ -119,4 +143,7 @@ public static class PathDoctor
 
         return report;
     }
+
+    private static Func<string, List<string>?>? DefaultOtherWriters =>
+        OperatingSystem.IsWindows() ? Platform.FolderAccess.OtherWriters : null;
 }
