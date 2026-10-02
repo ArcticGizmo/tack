@@ -87,6 +87,65 @@ public sealed class ShimTests : IClassFixture<ShimFixture>, IDisposable
     }
 
     [Fact]
+    public void Finds_a_command_in_an_extra_bin_dir()
+    {
+        // Python's layout: python.exe in the version's folder, pip.exe in Scripts\ under it.
+        string home = CmdInstall("python", "@echo off\r\necho FROM=home\r\n");
+        string scripts = Directory.CreateDirectory(Path.Combine(home, "Scripts")).FullName;
+        File.WriteAllText(Path.Combine(scripts, "pip.cmd"), "@echo off\r\necho FROM=scripts ARGS=%*\r\nexit /b 5\r\n");
+        var central = new CentralConfig
+        {
+            Tools = { ["python"] = new RegisteredTool { Versions = { ["3.12.10"] = new InstalledVersion
+            {
+                BinDir = home, ExtraBinDirs = new() { scripts }, Exposes = { "python", "pip" },
+            } } } },
+            Defaults = { ["python"] = "3.12.10" },
+        };
+        string resolved = WriteResolved(central);
+
+        var pip = Run(_fx.ShimFor("pip"), ["-V"], _work, resolved);
+        Assert.Equal(5, pip.ExitCode);
+        Assert.Contains("FROM=scripts ARGS=-V", pip.Stdout);
+        Assert.Contains("FROM=home", Run(_fx.ShimFor("python"), [], _work, resolved).Stdout);
+    }
+
+    [Fact]
+    public void The_bin_dir_beats_an_extra_bin_dir()
+    {
+        string home = CmdInstall("pip", "@echo off\r\necho FROM=home\r\n");
+        string extra = CmdInstall("pip", "@echo off\r\necho FROM=extra\r\n");
+        var central = new CentralConfig
+        {
+            Tools = { ["python"] = new RegisteredTool { Versions = { ["3.12.10"] = new InstalledVersion
+            {
+                BinDir = home, ExtraBinDirs = new() { extra }, Exposes = { "python", "pip" },
+            } } } },
+            Defaults = { ["python"] = "3.12.10" },
+        };
+
+        Assert.Contains("FROM=home", Run(_fx.ShimFor("pip"), [], _work, WriteResolved(central)).Stdout);
+    }
+
+    [Fact]
+    public void A_command_in_no_bin_dir_names_every_folder_it_searched()
+    {
+        string home = CmdInstall("python", "@echo off\r\n");
+        string scripts = Directory.CreateDirectory(Path.Combine(home, "Scripts")).FullName;
+        var central = new CentralConfig
+        {
+            Tools = { ["python"] = new RegisteredTool { Versions = { ["3.12.10"] = new InstalledVersion
+            {
+                BinDir = home, ExtraBinDirs = new() { scripts }, Exposes = { "python", "pip" },
+            } } } },
+            Defaults = { ["python"] = "3.12.10" },
+        };
+
+        var r = Run(_fx.ShimFor("pip"), [], _work, WriteResolved(central));
+        Assert.Equal(127, r.ExitCode);
+        Assert.Contains($"found in {home} or {scripts}", r.Stderr);
+    }
+
+    [Fact]
     public void Nearest_tack_yml_selects_the_version_end_to_end()
     {
         // Two versions with distinguishable .cmd targets; a tack.yml pins v2 in a subtree.

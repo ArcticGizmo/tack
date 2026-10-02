@@ -39,6 +39,33 @@ public sealed class ConfigStoreTests : IDisposable
         Assert.Contains("\"ignoreTackFiles\": true", File.ReadAllText(store.Path));
         Assert.Contains("npm", loaded.Tools["node"].Versions["20.11.0"].Exposes);
         Assert.DoesNotContain("bindings", File.ReadAllText(store.Path)); // a clean config never writes the legacy key
+        Assert.DoesNotContain("extraBinDirs", File.ReadAllText(store.Path)); // nor a version's optional keys
+        Assert.DoesNotContain("install", File.ReadAllText(store.Path));
+    }
+
+    [Fact]
+    public void Round_trips_a_managed_version()
+    {
+        var store = new ConfigStore(Path.Combine(_dir, "config.json"));
+        var at = new DateTimeOffset(2026, 10, 2, 13, 15, 0, TimeSpan.FromHours(10));
+        var c = new CentralConfig
+        {
+            Tools = { ["python"] = new RegisteredTool { Versions = { ["3.12.10"] = new InstalledVersion
+            {
+                BinDir = @"C:\i\python\3.12.10",
+                ExtraBinDirs = new() { @"C:\i\python\3.12.10\Scripts" },
+                Exposes = { "python", "pip" },
+                Install = new InstallReceipt { Source = "python.org", Url = "https://example.org/p.zip", Sha256 = "ab12", InstalledAt = at },
+            } } } },
+        };
+        store.Save(c);
+
+        var v = store.Load().Tools["python"].Versions["3.12.10"];
+        Assert.Equal(new[] { @"C:\i\python\3.12.10\Scripts" }, v.ExtraBinDirs);
+        Assert.Equal("python.org", v.Install!.Source);
+        Assert.Equal("https://example.org/p.zip", v.Install.Url);
+        Assert.Equal("ab12", v.Install.Sha256);
+        Assert.Equal(at, v.Install.InstalledAt);
     }
 
     [Fact]
@@ -490,6 +517,40 @@ public sealed class PathDoctorTests : IDisposable
         Assert.All(fails, c => Assert.Equal(CheckStatus.Fail, c.Status));
         Assert.Contains(fails, c => c.Detail.StartsWith($"{shims} (system PATH entry 2)"));
         Assert.Contains(fails, c => c.Detail.StartsWith($"{old} (system PATH entry 3)"));
+    }
+
+    [Fact]
+    public void A_missing_managed_version_says_how_to_put_it_back()
+    {
+        string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
+        var config = NodeAt(Path.Combine(_root, "gone"));
+        config.Tools["node"].Versions["1"].Install = new InstallReceipt { Source = "nodejs.org" };
+
+        var report = PathDoctor.Run(config, shims, FakeSearch.Of(null, shims));
+
+        var check = Assert.Single(report.Checks, c => c.Title == "Missing binDir for node@1");
+        Assert.Contains("'tack tool install node@1' puts it back", check.Detail);
+    }
+
+    [Fact]
+    public void Reports_unregistered_install_folders_and_leftovers()
+    {
+        string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
+
+        var report = PathDoctor.Run(NodeAt(_root), shims, FakeSearch.Of(null, shims),
+            unregisteredInstalls: new[]
+            {
+                new Tack.Core.Installs.UnregisteredFolder(@"C:\i\node\9.0.0", Owned: true),
+                new Tack.Core.Installs.UnregisteredFolder(@"C:\i\python\3.9.0", Owned: false),
+            },
+            installLeftovers: new[] { @"C:\i\.trash\abc" });
+
+        var folders = report.Checks.Where(c => c.Title == "Install folder nothing is registered for").ToList();
+        Assert.All(folders, c => Assert.Equal(CheckStatus.Warn, c.Status));
+        Assert.Contains(folders, c => c.Detail.StartsWith(@"C:\i\node\9.0.0: tack installed it; tack doctor --fix deletes it"));
+        Assert.Contains(folders, c => c.Detail.StartsWith(@"C:\i\python\3.9.0: tack didn't install it") && c.Detail.Contains("left alone"));
+        var leftovers = Assert.Single(report.Checks, c => c.Title == "Leftovers from an unfinished install or removal");
+        Assert.Contains(@"C:\i\.trash\abc", leftovers.Detail);
     }
 
     [Fact]

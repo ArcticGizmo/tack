@@ -35,6 +35,9 @@ public sealed class ResolvedVersion
 
     /// <summary>Variables the shim sets for this version's process; null when there are none.</summary>
     public Dictionary<string, string>? Env { get; set; }
+
+    /// <summary>Directories searched after <see cref="BinDir"/>; null when there are none.</summary>
+    public List<string>? ExtraBinDirs { get; set; }
 }
 
 public sealed class ResolvedZone
@@ -66,4 +69,5 @@ public sealed class ResolvedZone
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(ResolvedConfig))]
 [JsonSerializable(typeof(CentralConfig))]
+[JsonSerializable(typeof(Tack.Core.Installs.InstallMarker))]
 public partial class TackJson : System.Text.Json.Serialization.JsonSerializerContext { }

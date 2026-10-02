@@ -1,3 +1,5 @@
+using Tack.Core.Resolution;
+
 namespace Tack.Core.Config;
 
 /// <summary>What a removal did, so the CLI can report it and warn about fallout.</summary>
@@ -13,24 +15,47 @@ public sealed record RemovalResult(
 /// </summary>
 public static class ToolRegistry
 {
-    /// <summary>Every registered tool@version, sorted by tool then version (case-insensitive).</summary>
+    /// <summary>Every registered tool@version, sorted by tool (case-insensitive) then <see cref="VersionOrder"/>.</summary>
     public static List<string> Entries(CentralConfig config)
     {
         var list = new List<string>();
         foreach (var (tool, t) in config.Tools.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
-            foreach (var version in t.Versions.Keys.OrderBy(v => v, StringComparer.OrdinalIgnoreCase))
+            foreach (var version in t.Versions.Keys.Order(VersionOrder.Comparer))
                 list.Add($"{tool}@{version}");
         return list;
     }
 
-    /// <summary>The registered versions of one tool, sorted; empty if the tool isn't registered.</summary>
+    /// <summary>The registered versions of one tool, oldest first; empty if the tool isn't registered.</summary>
     public static List<string> VersionsOf(CentralConfig config, string tool) =>
         config.Tools.TryGetValue(tool, out var t)
-            ? t.Versions.Keys.OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList()
+            ? t.Versions.Keys.Order(VersionOrder.Comparer).ToList()
             : new List<string>();
 
     public static bool Exists(CentralConfig config, string tool, string version) =>
         config.Tools.TryGetValue(tool, out var t) && t.Versions.ContainsKey(version);
+
+    /// <summary>
+    /// Register (or re-register) <paramref name="tool"/>@<paramref name="version"/> (mutates <paramref name="config"/>).
+    /// The one place both <c>tack tool add</c> and <c>tack tool install</c> go through, so they can't drift. The tool's
+    /// own name is always exposed (first, if it had to be added), re-registering a version replaces everything about
+    /// it, and the first version a tool gets becomes its default. Returns true when it became the default.
+    /// </summary>
+    public static bool Register(CentralConfig config, string tool, string version, InstalledVersion installed)
+    {
+        if (!installed.Exposes.Any(x => string.Equals(x, tool, StringComparison.OrdinalIgnoreCase)))
+            installed.Exposes.Insert(0, tool);
+
+        if (!config.Tools.TryGetValue(tool, out var registered))
+        {
+            registered = new RegisteredTool();
+            config.Tools[tool] = registered;
+        }
+        registered.Versions[version] = installed;
+
+        if (config.Defaults.ContainsKey(tool)) return false;
+        config.Defaults[tool] = version;
+        return true;
+    }
 
     /// <summary>
     /// Remove the given tool@version pairs (mutates <paramref name="config"/>). Drops any tool left with no
@@ -69,7 +94,7 @@ public static class ToolRegistry
             }
             if (config.Defaults.TryGetValue(toolKey, out var def) && !t.Versions.ContainsKey(def))
             {
-                string next = t.Versions.Keys.OrderByDescending(v => v, StringComparer.OrdinalIgnoreCase).First();
+                string next = t.Versions.Keys.OrderDescending(VersionOrder.Comparer).First();
                 config.Defaults[toolKey] = next;
                 repointed.Add($"{toolKey}: {def} -> {next}");
             }

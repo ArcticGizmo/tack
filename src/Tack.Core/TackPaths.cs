@@ -27,6 +27,20 @@ public static class TackPaths
         /// <summary>Before/after records of every user PATH edit.</summary>
         public static string PathBackupsDir => Path.Combine(Root, "path-backups");
 
+        /// <summary>Managed installs (<c>tack tool install</c>): one folder per <c>&lt;tool&gt;\&lt;version&gt;</c>, plus the
+        /// dot-folders below. Local, never roaming: they're large and specific to this machine's architecture.</summary>
+        public static string InstallsDir => Path.Combine(Root, "installs");
+
+        /// <summary>Where an install downloads and unpacks before it's renamed into place (same volume, so the rename
+        /// is atomic).</summary>
+        public static string InstallsStagingDir => Path.Combine(InstallsDir, ".staging");
+
+        /// <summary>Where a removed version is renamed to before it's deleted, so an in-use version fails cleanly.</summary>
+        public static string InstallsTrashDir => Path.Combine(InstallsDir, ".trash");
+
+        /// <summary>Downloaded version indexes, kept for a while so listing what's available needn't hit the network.</summary>
+        public static string InstallsCacheDir => Path.Combine(InstallsDir, ".cache");
+
         /// <summary>The release profile's shims, whatever profile this process runs as. A dev instance places
         /// itself directly behind them on the user PATH.</summary>
         public static string ReleaseShimsDir => Path.Combine(DataRoot(TackProfile.ReleaseDataFolder), "shims");

@@ -37,6 +37,11 @@ internal static class Render
                  .Select(kv => kv.Value.Length == 0 ? $"{kv.Key} (unset)" : $"{kv.Key}={kv.Value}")
                  .ToList();
 
+    /// <summary>Where a managed version came from, as plain text:
+    /// <c>installed by tack from nodejs.org on 2026-10-02 (https://...)</c>.</summary>
+    public static string Source(Tack.Core.Config.InstallReceipt install) =>
+        $"installed by tack from {install.Source} on {install.InstalledAt:yyyy-MM-dd} ({install.Url})";
+
     /// <summary>Say which commands won't reach tack's shims, and what to do about each (nulls are skipped).</summary>
     public static void Shadows(IEnumerable<Shadow?> shadows)
     {

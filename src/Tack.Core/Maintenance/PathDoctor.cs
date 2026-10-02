@@ -36,7 +36,9 @@ public static class PathDoctor
         IEnumerable<string>? tackShimsDirs = null,
         IEnumerable<string>? everWired = null,
         IEnumerable<string>? ownFolders = null,
-        Func<string, List<string>?>? otherWriters = null)
+        Func<string, List<string>?>? otherWriters = null,
+        IReadOnlyList<Installs.UnregisteredFolder>? unregisteredInstalls = null,
+        IReadOnlyList<string>? installLeftovers = null)
     {
         // Shims dirs of any tack instance (both profiles). One of those ahead of us isn't a rogue install - it's
         // the release tack in front of a dev one - so it's reported as a hand-over hint, not per-tool shadowing.
@@ -126,11 +128,23 @@ public static class PathDoctor
         foreach (var bad in ShimName.Invalid(config))
             report.Add("Invalid command name", CheckStatus.Fail, $"{bad}; it's never intercepted - fix it in config.json");
 
-        // Missing binDirs.
+        // Missing binDirs (and extra bin folders). A managed version can simply be installed again.
         foreach (var (toolName, tool) in config.Tools)
             foreach (var (version, iv) in tool.Versions)
-                if (!dirExists(iv.BinDir))
-                    report.Add($"Missing binDir for {toolName}@{version}", CheckStatus.Fail, iv.BinDir);
+                foreach (var dir in iv.BinDirs())
+                    if (!dirExists(dir))
+                        report.Add($"Missing binDir for {toolName}@{version}", CheckStatus.Fail, iv.Install is null
+                            ? dir
+                            : $"{dir}; tack installed it, so 'tack tool install {toolName}@{version}' puts it back");
+
+        // Managed installs: folders nothing is registered for, and what an interrupted install or removal left.
+        foreach (var folder in unregisteredInstalls ?? Array.Empty<Installs.UnregisteredFolder>())
+            report.Add("Install folder nothing is registered for", CheckStatus.Warn, folder.Owned
+                ? $"{folder.Path}: tack installed it; tack doctor --fix deletes it"
+                : $"{folder.Path}: tack didn't install it (no {Installs.Installer.MarkerFile}), so it's left alone; delete it yourself if you don't need it");
+        if (installLeftovers is { Count: > 0 } leftovers)
+            report.Add("Leftovers from an unfinished install or removal", CheckStatus.Warn,
+                $"{string.Join(", ", leftovers)}; tack doctor --fix deletes them");
 
         // Pre-zones bindings with a mid-path wildcard: no single-directory equivalent, so they no longer apply.
         foreach (var glob in ZoneRegistry.Unmigrated(config))

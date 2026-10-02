@@ -32,6 +32,10 @@ app.Configure(cfg =>
         tool.SetDescription("Manage the central tool registry (add, remove, list).");
         tool.AddCommand<ToolsAddCommand>("add")
             .WithDescription("Register an existing tool install in the central registry.");
+        tool.AddCommand<ToolsInstallCommand>("install")
+            .WithDescription("Download Node or Python from its publisher and register it (e.g. node@lts, python@3.12).");
+        tool.AddCommand<ToolsAvailableCommand>("available")
+            .WithDescription("List the Node or Python versions tool install can install here.");
         tool.AddCommand<ToolsRemoveCommand>("remove")
             .WithDescription("Remove tool versions (interactive picker when no version is given).");
         tool.AddCommand<ToolsListCommand>("list")

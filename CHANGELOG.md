@@ -9,6 +9,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.2.1] - 2026-10-02
+
+- `tack tool install node@lts` downloads Node or Python and registers it
+- `20`, `3.12`, `latest` and `lts` pick the newest matching release
+- Every download's SHA-256 is checked; a mismatch is deleted, not installed
+- Python arrives with a working `pip` (python.org's zip forgot it)
+- Python before 3.11 is declined: python.org publishes no checksum for it
+- `tack tool available` lists what you could install, newest first
+- It works offline from the cached list, and admits how old it is
+- `tool remove` deletes the files of versions tack installed
+- `--keep-files` hands the folder over instead
+- Removal refuses while something runs from it, and names the culprit
+- `tool list` marks managed versions; `tack info` says where one came from
+- `tack doctor` sweeps up after interrupted installs
+- `tool add` still takes installs from anywhere (nvm and fnm, you may go)
+- Removing the default version picks 10.x over 9.x, as numbers do
+- A `3.15` pin prefers `3.15.0` to its release candidate
+
+---
+
 ## [v0.2.0] - 2026-10-02
 
 - tack leaves the system PATH for your user PATH

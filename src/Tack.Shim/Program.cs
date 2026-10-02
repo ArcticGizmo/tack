@@ -104,11 +104,11 @@ static (string? Target, string? Error) Decide(string exposed, Resolution res, Re
                 return (null, res.Detail ?? $"'{exposed}' did not resolve for this directory");
             return Passthrough(exposed);
 
-        // Resolved to a concrete installed version: locate the real binary in its binDir.
+        // Resolved to a concrete installed version: locate the real binary in its binDir, then its extra bin folders.
         default:
-            string? target = BinaryLocator.Locate(res.BinDir!, exposed, File.Exists);
+            string? target = BinaryLocator.Locate(res.BinDirs, exposed, File.Exists);
             return target is null
-                ? (null, $"{exposed} {res.Version}: no '{exposed}' executable found in {res.BinDir}")
+                ? (null, $"{exposed} {res.Version}: no '{exposed}' executable found in {string.Join(" or ", res.BinDirs)}")
                 : (target, null);
     }
 }
