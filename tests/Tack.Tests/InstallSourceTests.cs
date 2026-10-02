@@ -268,6 +268,67 @@ public sealed class PythonSourceTests
     }
 }
 
+public sealed class AvailableTests
+{
+    private static readonly NodeSource Node = new();
+    private static readonly PythonSource Python = new();
+
+    private static string[] List(IToolSource source, IReadOnlyList<RemoteVersion> index, Architecture arch = Architecture.X64,
+        string? prefix = null, bool all = false) =>
+        Available.List(source, index, arch, prefix, all).Select(r => r.Version).ToArray();
+
+    [Fact]
+    public void Node_shows_the_newest_of_each_major_with_lts_names()
+    {
+        var rows = Available.List(Node, InstallFixtures.Node(), Architecture.X64);
+
+        Assert.Equal(new[] { "26.10.0", "25.9.0", "24.21.0", "23.11.1", "22.23.3", "21.7.3", "20.20.2", "19.9.0", "18.20.8", "17.9.1", "16.20.2" },
+            rows.Select(r => r.Version));
+        Assert.Equal("Krypton", rows.Single(r => r.Version == "24.21.0").Lts);
+        Assert.All(rows, r => Assert.Null(r.Unavailable));
+    }
+
+    [Fact]
+    public void Node_on_arm64_leaves_out_lines_with_no_arm64_build() =>
+        Assert.Equal(new[] { "26.10.0", "25.9.0", "24.21.0", "23.11.1", "22.23.3", "21.7.3", "20.20.2", "19.9.0" },
+            List(Node, InstallFixtures.Node(), Architecture.Arm64));
+
+    [Theory]
+    [InlineData("24", new[] { "24.21.0", "24.20.0", "24.0.0" })]
+    [InlineData("v20", new[] { "20.20.2", "20.11.1", "20.9.0" })]
+    [InlineData("20.11", new[] { "20.11.1" })]
+    [InlineData("2", new string[0])] // the dot boundary: not 20.x, 24.x...
+    public void A_prefix_lists_its_whole_line(string prefix, string[] expected) =>
+        Assert.Equal(expected, List(Node, InstallFixtures.Node(), prefix: prefix));
+
+    [Fact]
+    public void Python_shows_the_newest_of_each_minor_it_can_install()
+    {
+        // Not 3.15 (only a pre-release), not 3.10 (no checksum).
+        Assert.Equal(new[] { "3.14.8", "3.13.16", "3.12.10", "3.11.0" }, List(Python, InstallFixtures.Python()));
+    }
+
+    [Fact]
+    public void A_prefix_includes_pre_releases_of_that_line()
+    {
+        var row = Assert.Single(Available.List(Python, InstallFixtures.Python(), Architecture.X64, prefix: "3.15"));
+        Assert.Equal("3.15.0rc2", row.Version);
+        Assert.True(row.PreRelease);
+    }
+
+    [Fact]
+    public void All_lists_everything_and_says_what_cant_be_installed()
+    {
+        var rows = Available.List(Python, InstallFixtures.Python(), Architecture.X64, all: true);
+
+        Assert.Equal(new[] { "3.15.0rc2", "3.14.8", "3.13.16", "3.12.10", "3.12.9", "3.11.0", "3.10.11" }, rows.Select(r => r.Version));
+        Assert.Equal("no checksum published", rows.Single(r => r.Version == "3.10.11").Unavailable);
+
+        var node = Available.List(Node, InstallFixtures.Node(), Architecture.Arm64, all: true);
+        Assert.Equal("no arm64 build", node.Single(r => r.Version == "18.20.8").Unavailable);
+    }
+}
+
 public sealed class ToolIndexTests
 {
     private static Func<Uri, CancellationToken, Task<string>> Pages(Dictionary<string, string> byUrl) =>

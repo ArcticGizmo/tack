@@ -11,6 +11,99 @@ using Tack.Core.Resolution;
 
 namespace Tack.Cli.Commands;
 
+// ---- tool available ------------------------------------------------------------------------------
+
+public sealed class ToolsAvailableSettings : CommandSettings
+{
+    [CommandArgument(0, "<tool>")]
+    [Description("node or python.")]
+    public string Tool { get; init; } = "";
+
+    [CommandArgument(1, "[prefix]")]
+    [Description("List every version in one line, e.g. 20 or 3.12 (pre-releases included).")]
+    public string? Prefix { get; init; }
+
+    [CommandOption("-a|--all")]
+    [Description("List every version, including ones tack can't install here and why.")]
+    public bool All { get; init; }
+
+    [CommandOption("--refresh")]
+    [Description("Fetch the list of versions again, even if tack read it in the last hour.")]
+    public bool Refresh { get; init; }
+}
+
+/// <summary><c>tack tool available</c>: what <c>tool install</c> could install here, newest first, with what you
+/// already have marked. Works offline from the cached list, and says how old it is.</summary>
+public sealed class ToolsAvailableCommand : AsyncCommand<ToolsAvailableSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, ToolsAvailableSettings settings)
+    {
+        if (ToolSources.Find(settings.Tool) is not { } source)
+        {
+            AnsiConsole.MarkupLine($"[red]tack can't install '{Markup.Escape(settings.Tool)}'.[/] It installs " +
+                $"{Markup.Escape(string.Join(" and ", ToolSources.All.Select(s => s.Tool)))}.");
+            return 1;
+        }
+
+        var arch = RuntimeInformation.OSArchitecture;
+        IndexResult index;
+        try
+        {
+            using var net = new HttpDownloader(ToolsInstallCommand.UserAgent());
+            index = await ToolsInstallCommand.Spin($"Reading {source.Publisher}'s versions...", () =>
+                new IndexCache(TackPaths.User.InstallsCacheDir).LoadAsync(source, net.GetStringAsync, settings.Refresh));
+        }
+        catch (InstallException e)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(e.Message)}[/]");
+            return 1;
+        }
+
+        var rows = Available.List(source, index.Versions, arch, settings.Prefix, settings.All);
+        if (rows.Count == 0)
+        {
+            AnsiConsole.MarkupLine(settings.Prefix is { Length: > 0 } p
+                ? $"[yellow]{Markup.Escape(source.Publisher)} has nothing tack can install for {Markup.Escape(source.Tool)} {Markup.Escape(p)} on Windows {VersionSpec.ArchName(arch)}.[/] [grey](--all lists everything)[/]"
+                : $"[yellow]{Markup.Escape(source.Publisher)} lists nothing tack can install on Windows {VersionSpec.ArchName(arch)}.[/]");
+            return 0;
+        }
+
+        var registered = new TackEnvironment().Load().Tools.TryGetValue(source.Tool, out var tool)
+            ? tool.Versions
+            : new Dictionary<string, InstalledVersion>(StringComparer.OrdinalIgnoreCase);
+
+        string Note(AvailableVersion r) => registered.TryGetValue(r.Version, out var iv)
+            ? iv.Install is null ? "[grey]registered (tool add)[/]" : "[green]installed[/]"
+            : r.Unavailable is { } why ? $"[grey]can't install: {Markup.Escape(why)}[/]"
+            : r.PreRelease ? "[yellow]pre-release[/]"
+            : "";
+        bool anyNote = rows.Any(r => Note(r).Length > 0);
+
+        var table = new Table().RoundedBorder();
+        table.AddColumn(new TableColumn("version").NoWrap());
+        if (source.HasLts) table.AddColumn("lts");
+        if (anyNote) table.AddColumn("");
+        foreach (var r in rows)
+        {
+            var cells = new List<string> { Markup.Escape(r.Version) };
+            if (source.HasLts) cells.Add(r.Lts is { } lts ? Markup.Escape(lts) : "");
+            if (anyNote) cells.Add(Note(r));
+            table.AddRow(cells.ToArray());
+        }
+
+        string what = settings.All ? "every version" : settings.Prefix is { Length: > 0 } pre ? $"{pre}.x" : "the newest of each line";
+        AnsiConsole.MarkupLine($"[grey]{Markup.Escape(source.Tool)} from {Markup.Escape(source.Publisher)} for Windows {VersionSpec.ArchName(arch)}: {Markup.Escape(what)}[/]");
+        AnsiConsole.Write(table);
+        if (index.Offline is not null)
+            AnsiConsole.MarkupLine($"[yellow]offline: this is the list from {ToolsInstallCommand.Ago(index.CachedAt!.Value)}[/] [grey]({Markup.Escape(index.Offline)})[/]");
+        else if (index.CachedAt is { } at)
+            AnsiConsole.MarkupLine($"[grey]list fetched {ToolsInstallCommand.Ago(at)}; --refresh fetches it again[/]");
+        AnsiConsole.MarkupLine($"[grey]install one with [green]tack tool install {Markup.Escape(source.Tool)}@<version>[/]" +
+            (settings.Prefix is null && !settings.All ? $"; [green]tack tool available {Markup.Escape(source.Tool)} <line>[/] lists a whole line[/]" : "[/]"));
+        return 0;
+    }
+}
+
 // ---- tool install --------------------------------------------------------------------------------
 
 public sealed class ToolsInstallSettings : CommandSettings
@@ -163,7 +256,7 @@ public sealed class ToolsInstallCommand : AsyncCommand<ToolsInstallSettings>
         };
     }
 
-    private static async Task<T> Spin<T>(string status, Func<Task<T>> work)
+    internal static async Task<T> Spin<T>(string status, Func<Task<T>> work)
     {
         T result = default!;
         await AnsiConsole.Status().StartAsync(status, async _ => result = await work());
@@ -173,9 +266,11 @@ public sealed class ToolsInstallCommand : AsyncCommand<ToolsInstallSettings>
     internal static string Ago(DateTimeOffset at)
     {
         var age = DateTimeOffset.UtcNow - at;
-        return age.TotalMinutes < 90 ? $"{Math.Max(1, (int)age.TotalMinutes)} minutes ago"
-            : age.TotalHours < 48 ? $"{(int)age.TotalHours} hours ago"
-            : $"{(int)age.TotalDays} days ago";
+        return age.TotalMinutes < 90 ? Count(Math.Max(1, (int)age.TotalMinutes), "minute")
+            : age.TotalHours < 48 ? Count((int)age.TotalHours, "hour")
+            : Count((int)age.TotalDays, "day");
+
+        static string Count(int n, string unit) => $"{n} {unit}{(n == 1 ? "" : "s")} ago";
     }
 
     internal static string UserAgent() => $"tack/{VersionInfo.Of(Assembly.GetExecutingAssembly())} (+https://github.com/ArcticGizmo/tack)";

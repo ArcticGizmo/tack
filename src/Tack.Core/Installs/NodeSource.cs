@@ -13,6 +13,7 @@ public sealed class NodeSource : IToolSource
     public string Tool => "node";
     public string Publisher => "nodejs.org";
     public bool HasLts => true;
+    public int LineSegments => 1;
     public Uri IndexUrl { get; } = new("https://nodejs.org/dist/index.json");
 
     // corepack is gone by Node 26; the installer drops names that don't exist. install_tools.bat and nodevars.bat

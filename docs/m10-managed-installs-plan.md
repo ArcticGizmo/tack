@@ -229,7 +229,14 @@ Done, and checked by hand against the dev profile, which was put back afterwards
 **Done when:** removing a managed version with node running from it fails without changing the config, and
 succeeds once node exits.
 
-### Checkpoint 6: `tack tool available`
+### Checkpoint 6: `tack tool available` ✅ 2026-10-02
+
+Done: `Available` in Core (tested in `AvailableTests`) and `ToolsAvailableCommand`. A line is one segment for Node
+and two for Python (`IToolSource.LineSegments`). The default view and a prefix list only what `tool install` can
+install here. A prefix includes that line's pre-releases. `--all` adds the rest, marked with the reason
+(`no checksum published`, `no arm64 build`). Versions registered with `tool add` show as `registered`, managed
+ones as `installed`. Offline was checked with a dead proxy: `available --refresh` used the cached list and said
+how old it was, and `install` with nothing cached failed cleanly, leaving nothing behind.
 
 - `tack tool available <tool> [prefix]`: by default the newest version of each major (Node) or minor (Python),
   with LTS names, pre-releases hidden, and versions you already have marked `installed`. A prefix lists every

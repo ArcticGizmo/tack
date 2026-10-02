@@ -16,6 +16,7 @@ public sealed partial class PythonSource : IToolSource
     public string Tool => "python";
     public string Publisher => "python.org";
     public bool HasLts => false;
+    public int LineSegments => 2;
     public Uri IndexUrl { get; } = new("https://www.python.org/ftp/python/index-windows.json");
 
     // No pythonw: the shim is a console program, so a pythonw shim would open the console window pythonw exists to

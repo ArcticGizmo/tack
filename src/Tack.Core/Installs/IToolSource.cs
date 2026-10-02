@@ -17,6 +17,10 @@ public interface IToolSource
     /// <summary>Whether <c>lts</c> means anything for this tool.</summary>
     bool HasLts { get; }
 
+    /// <summary>How many leading segments make a release line: 1 for Node (<c>24</c>), 2 for Python (<c>3.12</c>).
+    /// <c>tool available</c> shows the newest of each line.</summary>
+    int LineSegments { get; }
+
     /// <summary>The index's first page.</summary>
     Uri IndexUrl { get; }
 
