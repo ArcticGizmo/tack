@@ -28,6 +28,10 @@ public sealed class InstallMarker
 /// (retried on the next install or <c>doctor --fix</c>).</summary>
 public sealed record RemoveResult(string? Leftover);
 
+/// <summary>A <c>&lt;tool&gt;\&lt;version&gt;</c> folder in the installs folder that no registered version points at.
+/// <see cref="Owned"/> when tack made it (<see cref="Installer.OwnershipProblem"/>), so <c>doctor --fix</c> may delete it.</summary>
+public sealed record UnregisteredFolder(string Path, bool Owned);
+
 /// <summary>
 /// Puts managed versions on disk and takes them off again (see docs/m10-managed-installs-plan.md, I3 and I7 to I11).
 /// Registering them is the caller's job, through <see cref="ToolRegistry.Register"/>. Everything happens under one
@@ -44,16 +48,23 @@ public sealed class Installer
     public const string MarkerFile = ".tack-install.json";
 
     private readonly string _root;
-    private readonly IDownloader _downloader;
-    private readonly IProcessRunner _runner;
+    private readonly IDownloader? _downloader;
+    private readonly IProcessRunner? _runner;
     private readonly Func<DateTimeOffset> _now;
+    private readonly Func<string, IReadOnlyList<string>> _runningFrom;
 
-    public Installer(string installsDir, IDownloader downloader, IProcessRunner runner, Func<DateTimeOffset>? now = null)
+    /// <param name="downloader">Needed only to install; removing and sweeping work without one.</param>
+    /// <param name="runner">Needed only to install.</param>
+    /// <param name="runningFrom">The programs running from a folder (tests); see <see cref="Platform.RunningProcesses"/>.</param>
+    public Installer(string installsDir, IDownloader? downloader = null, IProcessRunner? runner = null,
+        Func<DateTimeOffset>? now = null, Func<string, IReadOnlyList<string>>? runningFrom = null)
     {
         _root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(installsDir));
         _downloader = downloader;
         _runner = runner;
         _now = now ?? (() => DateTimeOffset.Now);
+        _runningFrom = runningFrom
+            ?? (OperatingSystem.IsWindows() ? Platform.RunningProcesses.From : _ => Array.Empty<string>());
     }
 
     /// <summary>Unpacked size above which an archive is refused: far beyond any real Node or Python, short of filling a disk.</summary>
@@ -72,6 +83,8 @@ public sealed class Installer
     public async Task<InstalledVersion> InstallAsync(InstallPlan plan, IProgress<InstallProgress>? progress = null,
         CancellationToken cancel = default)
     {
+        if (_downloader is null || _runner is null)
+            throw new InvalidOperationException("this Installer was made without a downloader and process runner, so it can't install");
         if (ShimName.Problem(plan.Tool) is { } badTool) throw new InstallException($"'{plan.Tool}' can't be a tool name: {badTool}.");
         if (!RemoteVersion.IsPlain(plan.Version)) throw new InstallException($"'{plan.Version}' isn't a version tack can install.");
         string sha = Checksums.Sha256(plan.Sha256) ?? throw new InstallException($"'{plan.Sha256}' isn't a SHA-256.");
@@ -92,7 +105,7 @@ public sealed class Installer
                 string archive = Path.Combine(work, "archive.zip");
                 progress?.Report(new InstallProgress(InstallStage.Downloading, new DownloadProgress(0, null)));
                 var download = progress is null ? null : new Progress<DownloadProgress>(p => progress.Report(new InstallProgress(InstallStage.Downloading, p)));
-                await _downloader.DownloadFileAsync(plan.Url, archive, download, cancel).ConfigureAwait(false);
+                await _downloader!.DownloadFileAsync(plan.Url, archive, download, cancel).ConfigureAwait(false);
 
                 progress?.Report(new InstallProgress(InstallStage.Verifying));
                 string actual = await Sha256Of(archive, cancel).ConfigureAwait(false);
@@ -137,7 +150,7 @@ public sealed class Installer
         foreach (var step in plan.PostInstall)
         {
             progress?.Report(new InstallProgress(InstallStage.PostInstall, Detail: step.Description));
-            var result = await _runner.RunAsync(Path.Combine(target, step.Exe), step.Args, target, cancel).ConfigureAwait(false);
+            var result = await _runner!.RunAsync(Path.Combine(target, step.Exe), step.Args, target, cancel).ConfigureAwait(false);
             if (result.ExitCode != 0)
                 throw new InstallException($"{plan.Tool} {plan.Version}: {step.Description} failed (exit code {result.ExitCode}), " +
                     $"so it wasn't installed.{Tail(result.Output)}");
@@ -159,9 +172,11 @@ public sealed class Installer
     }
 
     /// <summary>
-    /// Delete a managed version's folder, if tack installed it (<see cref="OwnershipProblem"/>). It's renamed into
-    /// <c>.trash</c> first: Windows refuses that while anything is running from the folder or has it as its current
-    /// directory, so an in-use version fails here, untouched, before the caller changes any config.
+    /// Delete a managed version's folder, if tack installed it (<see cref="OwnershipProblem"/>), so an in-use version
+    /// fails here, untouched, before the caller changes any config. Two checks catch "in use": no program may be
+    /// running from the folder (Windows would let the folder be renamed under a running exe), and the folder is
+    /// renamed into <c>.trash</c> before anything is deleted (Windows refuses that while a file in it is open or it's
+    /// a process's current directory).
     /// </summary>
     public RemoveResult Remove(string folder)
     {
@@ -170,6 +185,9 @@ public sealed class Installer
         {
             if (OwnershipProblem(full) is { } why)
                 throw new InstallException($"tack won't delete {full}: {why}.");
+            if (_runningFrom(full) is { Count: > 0 } running)
+                throw new InstallException($"{full} is in use by {string.Join(", ", running)}, so nothing was removed. " +
+                    "Close it, then try again.");
 
             Directory.CreateDirectory(TrashDir);
             string trash = Path.Combine(TrashDir, Guid.NewGuid().ToString("N"));
@@ -212,8 +230,59 @@ public sealed class Installer
         return null;
     }
 
-    /// <summary>Delete whatever is in <c>.trash</c> (what a removal couldn't finish). Returns what's still there.</summary>
-    public IReadOnlyList<string> SweepTrash() => Sweep(TrashDir);
+    /// <summary>
+    /// Hand a managed version's folder over to you (<c>tool remove --keep-files</c>): its marker is deleted, so tack
+    /// no longer treats the folder as its own and will never delete it, <c>doctor --fix</c> included. A folder tack
+    /// doesn't own is left exactly as it is. Returns false in that case.
+    /// </summary>
+    public bool Disown(string folder)
+    {
+        using (TakeLock())
+        {
+            if (OwnershipProblem(folder) is not null) return false;
+            File.Delete(Path.Combine(Path.GetFullPath(folder), MarkerFile));
+            return true;
+        }
+    }
+
+    /// <summary>Every <c>&lt;tool&gt;\&lt;version&gt;</c> folder here that no version in <paramref name="config"/> has as its
+    /// binDir: left by <c>tool remove --keep-files</c>, a hand-edited config, or something else entirely.</summary>
+    public IReadOnlyList<UnregisteredFolder> Unregistered(CentralConfig config)
+    {
+        var registered = new HashSet<string>(
+            config.Tools.Values.SelectMany(t => t.Versions.Values).Select(v => Normal(v.BinDir)),
+            StringComparer.OrdinalIgnoreCase);
+        var found = new List<UnregisteredFolder>();
+        if (!Directory.Exists(_root)) return found;
+        foreach (var toolDir in Directory.EnumerateDirectories(_root))
+        {
+            if (Path.GetFileName(toolDir).StartsWith('.')) continue;
+            foreach (var versionDir in Directory.EnumerateDirectories(toolDir))
+                if (!registered.Contains(Normal(versionDir)))
+                    found.Add(new UnregisteredFolder(versionDir, OwnershipProblem(versionDir) is null));
+        }
+        return found;
+    }
+
+    private static string Normal(string path)
+    {
+        try { return Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)); }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { return path; }
+    }
+
+    /// <summary>What's left in <c>.staging</c> and <c>.trash</c> by an install or removal that didn't finish.</summary>
+    public IReadOnlyList<string> Leftovers() =>
+        new[] { StagingDir, TrashDir }.Where(Directory.Exists).SelectMany(Directory.EnumerateFileSystemEntries).ToList();
+
+    /// <summary>Delete <see cref="Leftovers"/>, under the lock so a running install's staging is never touched.
+    /// Returns what's still there (still in use).</summary>
+    public IReadOnlyList<string> SweepLeftovers()
+    {
+        using (TakeLock())
+            return SweepStaging().Concat(SweepTrash()).ToList();
+    }
+
+    private IReadOnlyList<string> SweepTrash() => Sweep(TrashDir);
 
     private IReadOnlyList<string> SweepStaging() => Sweep(StagingDir);
 

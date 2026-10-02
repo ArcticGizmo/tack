@@ -3,6 +3,7 @@ using Spectre.Console;
 using Spectre.Console.Cli;
 using Tack.Core;
 using Tack.Core.Config;
+using Tack.Core.Installs;
 using Tack.Core.Maintenance;
 using Tack.Core.Resolution;
 
@@ -223,7 +224,8 @@ public sealed class ToolsListCommand : Command<ToolsListSettings>
                     Render.EnvLines(installed.Env),
                     IsDefault: string.Equals(version, def, StringComparison.OrdinalIgnoreCase),
                     IsHere: string.Equals(version, here, StringComparison.OrdinalIgnoreCase),
-                    Missing: !installed.BinDirs().All(Directory.Exists)));
+                    Missing: !installed.BinDirs().All(Directory.Exists),
+                    installed.Install));
         }
 
         if (settings.Expand) WriteExpanded(rows);
@@ -235,7 +237,7 @@ public sealed class ToolsListCommand : Command<ToolsListSettings>
     }
 
     private sealed record Row(string Tool, string Version, string BinDir, List<string> ExtraBinDirs, string Commands,
-        List<string> Env, bool IsDefault, bool IsHere, bool Missing);
+        List<string> Env, bool IsDefault, bool IsHere, bool Missing, InstallReceipt? Install);
 
     /// <summary>The compact view. The tool name is shown on its first row only; the version cell carries the
     /// default / resolves-here markers. Long paths wrap inside their cell - <c>--expand</c> is for copying. The env
@@ -254,7 +256,8 @@ public sealed class ToolsListCommand : Command<ToolsListSettings>
         {
             string versionCell = Markup.Escape(x.Version)
                 + (x.IsDefault ? " [grey]default[/]" : "")
-                + (x.IsHere ? " [green]here[/]" : "");
+                + (x.IsHere ? " [green]here[/]" : "")
+                + (x.Install is not null ? " [blue]managed[/]" : "");
             // Extra bin folders go on their own lines under the binDir, each marked if it's the missing one.
             string pathCell = string.Join('\n', x.ExtraBinDirs.Prepend(x.BinDir).Select(dir => Directory.Exists(dir)
                 ? Markup.Escape(dir)
@@ -284,8 +287,11 @@ public sealed class ToolsListCommand : Command<ToolsListSettings>
             AnsiConsole.MarkupLine($"[bold]{Markup.Escape(x.Tool)}@{Markup.Escape(x.Version)}[/]"
                 + (x.IsDefault ? " [grey]default[/]" : "")
                 + (x.IsHere ? " [green]here[/]" : "")
+                + (x.Install is not null ? " [blue]managed[/]" : "")
                 + (x.Missing ? " [red]missing[/]" : ""));
             Console.WriteLine($"  path:     {x.BinDir}");
+            if (x.Install is { } install)
+                Console.WriteLine($"  source:   {Render.Source(install)}");
             foreach (var dir in x.ExtraBinDirs)
                 Console.WriteLine($"  also:     {dir}");
             Console.WriteLine($"  commands: {x.Commands}");
@@ -302,6 +308,10 @@ public sealed class ToolsRemoveSettings : CommandSettings
     [CommandArgument(0, "[tool@version]")]
     [Description("The tool (or tool@version) to remove. Omit for an interactive picker; give a tool with several versions to pick from just its versions.")]
     public string? Spec { get; init; }
+
+    [CommandOption("--keep-files")]
+    [Description("For a version tack installed: unregister it but leave its folder, which is then yours (tack won't delete it later).")]
+    public bool KeepFiles { get; init; }
 }
 
 public sealed class ToolsRemoveCommand : Command<ToolsRemoveSettings>
@@ -324,7 +334,54 @@ public sealed class ToolsRemoveCommand : Command<ToolsRemoveSettings>
             return 0;
         }
 
-        var result = ToolRegistry.Remove(config, targets.Select(e => Split(e)));
+        // A version tack installed loses its files first (I9). Deleting goes through a rename that Windows refuses
+        // while the version is in use, so a failure leaves that version registered and untouched.
+        var installs = new Installer(TackPaths.User.InstallsDir);
+        var removable = new List<(string Tool, string Version)>();
+        bool anyFailed = false;
+        foreach (var (tool, version) in targets.Select(Split))
+        {
+            var iv = config.Tools[tool].Versions[version];
+            if (iv.Install is null || !Directory.Exists(iv.BinDir))
+            {
+                removable.Add((tool, version));
+                continue;
+            }
+            // Recorded as managed but not a folder tack made (a hand-edited config): never deleted, only unregistered.
+            if (!settings.KeepFiles && installs.OwnershipProblem(iv.BinDir) is { } why)
+            {
+                anyFailed = true;
+                AnsiConsole.MarkupLine($"[red]{Markup.Escape(tool)}@{Markup.Escape(version)}: tack won't delete {Markup.Escape(iv.BinDir)}: {Markup.Escape(why)}.[/]");
+                AnsiConsole.MarkupLine($"[grey]to unregister it and leave the folder alone, use [green]tack tool remove {Markup.Escape(tool)}@{Markup.Escape(version)} --keep-files[/].[/]");
+                continue;
+            }
+            try
+            {
+                if (settings.KeepFiles)
+                {
+                    if (installs.Disown(iv.BinDir))
+                        AnsiConsole.MarkupLine($"[grey]kept {Markup.Escape(iv.BinDir)}; it's yours now, and tack won't delete it.[/]");
+                }
+                else
+                {
+                    var deleted = installs.Remove(iv.BinDir);
+                    AnsiConsole.MarkupLine($"[grey]deleted {Markup.Escape(iv.BinDir)}[/]");
+                    if (deleted.Leftover is { } left)
+                        AnsiConsole.MarkupLine($"[yellow]some of it couldn't be deleted yet:[/] {Markup.Escape(left)} [grey](tack doctor --fix retries)[/]");
+                    if (string.Equals(tool, "python", StringComparison.OrdinalIgnoreCase))
+                        AnsiConsole.MarkupLine($"[yellow]note:[/] virtual environments made with python {Markup.Escape(version)} no longer work; recreate them with another version.");
+                }
+                removable.Add((tool, version));
+            }
+            catch (InstallException e)
+            {
+                anyFailed = true;
+                AnsiConsole.MarkupLine($"[red]{Markup.Escape(tool)}@{Markup.Escape(version)}:[/] {Markup.Escape(e.Message)}");
+            }
+        }
+        if (removable.Count == 0) return 1;
+
+        var result = ToolRegistry.Remove(config, removable);
         env.Save(config);
 
         AnsiConsole.MarkupLine($"[green]removed[/] {Markup.Escape(string.Join(", ", result.Removed))}");
@@ -336,7 +393,7 @@ public sealed class ToolsRemoveCommand : Command<ToolsRemoveSettings>
             AnsiConsole.MarkupLine($"[yellow]zone now points at a removed version:[/] {Markup.Escape(z)} [grey](edit with tack zone)[/]");
 
         Shims.Sync(env, config);
-        return 0;
+        return anyFailed ? 1 : 0;
     }
 
     /// <summary>Work out which tool@version entries to remove, from the argument and/or an interactive picker.
@@ -378,10 +435,16 @@ public sealed class ToolsRemoveCommand : Command<ToolsRemoveSettings>
             candidates = ToolRegistry.Entries(config);
         }
 
-        return PickInteractively(candidates);
+        return PickInteractively(candidates, entry =>
+        {
+            var (tool, version) = Split(entry);
+            return config.Tools[tool].Versions[version].Install is null
+                ? Markup.Escape(entry)
+                : $"{Markup.Escape(entry)} [grey](tack installed it; deletes its files)[/]";
+        });
     }
 
-    private static List<string>? PickInteractively(List<string> candidates)
+    private static List<string>? PickInteractively(List<string> candidates, Func<string, string> label)
     {
         if (!AnsiConsole.Profile.Capabilities.Interactive)
         {
@@ -398,6 +461,7 @@ public sealed class ToolsRemoveCommand : Command<ToolsRemoveSettings>
             .WrapAround()
             .MoreChoicesText("[grey](move up and down to reveal more)[/]")
             .InstructionsText("[grey](press [blue]<space>[/] to toggle, [green]<enter>[/] to confirm - nothing selected cancels)[/]")
+            .UseConverter(label)
             .AddChoices(candidates);
 
         return AnsiConsole.Prompt(prompt);

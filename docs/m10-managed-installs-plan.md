@@ -52,7 +52,7 @@ Uninstalling tack keeps them along with the rest of tack's data, as it does toda
 | I6 | **Native architecture only.** x64 Windows gets x64 builds, arm64 gets arm64. If the vendor has no build for this architecture, the install fails and says so; there's no quiet fallback to emulated x64. | falling back to x64 on arm64 |
 | I7 | **tack only deletes what it installed.** A managed version carries an `Install` receipt in config (source, URL, SHA-256, date) **and** a `.tack-install.json` file in its folder. tack deletes a folder only if it is strictly inside the installs root and has that file. Everything registered with `tool add` is never deleted. | trusting the config flag alone |
 | I8 | **Installing a version name that's already registered from elsewhere is refused.** If `node@20.11.1` already points at `C:\node\20.11.1`, `tool install node@20.11.1` says so and stops. Remove it first. Installing a version that's already managed is a no-op that says so. | silently replacing it |
-| I9 | **Removing a managed version deletes its files by default** (`--keep-files` keeps them). The folder is first renamed into `.trash\`. Windows refuses the rename while something is running from it, so a version that's in use fails cleanly before the config changes, with "close whatever is running node 20.11.1". After the rename, tack unregisters it and deletes the trash; anything it can't delete yet is retried on the next install or `doctor --fix`. | deleting in place and leaving half a folder |
+| I9 | **Removing a managed version deletes its files by default** (`--keep-files` keeps them, and deletes the marker so tack never deletes them later). Two checks make an in-use version fail cleanly before the config changes. First, no program may be running from the folder, and the error names it: `node.exe (pid 1234)`. That check was added in checkpoint 5, which found that **Windows lets a folder be renamed while an exe in it is running**. Second, the folder is renamed into `.trash\` before anything is deleted, which Windows refuses while a file in it is open or a terminal's current directory is inside it. After the rename, tack unregisters it and deletes the trash; anything it can't delete yet is retried on the next install or `doctor --fix`. | deleting in place and leaving half a folder |
 | I10 | **Installs are atomic.** Download and unpack into `.staging\` and check the result. Then rename it into place (on the same volume, so the rename is atomic), run the post-install step **there** (pip's launchers embed their absolute path, so they can't be made in staging; see the [findings](m10-spike-findings.md#theres-no-pipexe)), and only then register it. If the post-install step fails, the folder goes to `.trash\` and nothing is registered. An interrupted install never leaves a registered half-install. Stale staging folders are swept on the next install. One mutex per profile serialises installs. A managed version is never moved after it's placed. | unpacking in place |
 | I11 | **Unpack the whole archive, then move its top folder.** `ZipFile.ExtractToDirectory` already refuses entries that escape the destination (no zip slip; a test pins that). The source names the archive's top folder (`node-v20.11.1-win-x64\`, or none for Python's flat zip), and that folder is what gets renamed into place, so tack never extracts entry by entry. | per-entry extraction with a stripped prefix |
 | I12 | **Python is the python.org build:** the hashed zips listed in its install-manager index (`index-windows.json` and its `next` pages), `pythoncore-*` entries only. That puts the **floor at 3.11.0**. Older versions are only on NuGet with no hash in the index, and asking for one says so. Never the embeddable zip (`pythonembed-*`): its `._pth` file switches off `site` and it has no pip. No `py` launcher, no `python3` alias, and no PEP 514 registry entries. tack still writes nothing but its own user PATH entries. | python-build-standalone; NuGet packages for 3.10 and older |
@@ -195,7 +195,26 @@ Done: `ToolsInstallCommand` (`src/Tack.Cli/Commands/InstallCommands.cs`), plus t
 `node -v`, `npm -v`, `python -V` and `pip -V` run through the shims under a `tack.yml` pin. The live test
 category covers the same.
 
-### Checkpoint 5: managed versions in `remove`, `list`, `info` and `doctor`
+### Checkpoint 5: managed versions in `remove`, `list`, `info` and `doctor` ✅ 2026-10-02
+
+Done, and checked by hand against the dev profile, which was put back afterwards:
+
+- **The first run failed the "Done when".** With node running from `installs\node\20.20.2`, the rename into
+  `.trash` succeeded: Windows renames a folder under a running exe and only refuses to delete the exe. So the
+  version was unregistered while in use, and `node.exe` was left in `.trash`. The fix is
+  `Platform.RunningProcesses`, which finds processes by image path and is checked before the rename (I9). On the
+  rerun, removal failed naming `node.exe (pid 34428)` with the config and folder untouched, then succeeded once
+  node exited.
+- **`--keep-files` disowns the folder** (deletes its marker). Without that, `doctor --fix` would later have
+  deleted the files you asked to keep, as an unregistered folder tack owns.
+- **Removal deletes files first, then unregisters only what was deleted.** One version in use doesn't stop the
+  others going. A version recorded as managed whose folder tack doesn't own (a hand-edited config) is refused,
+  with a hint to use `--keep-files`.
+- **`doctor`** reports leftovers in `.staging` and `.trash`, and install folders nothing is registered for. It
+  says whether tack made them, and `--fix` deletes only those. A missing managed version says to reinstall it.
+  `installs\` is in the folder-permission check. The leftover from the failed first run was found and swept this
+  way.
+- **`tool list`** shows `managed` (with `source:` under `--expand`), and **`info`** says where the version came from.
 
 - `tool remove`: managed versions delete their files (I9). The picker labels them `managed, deletes files`.
   `--keep-files` keeps them (the folder stays, the receipt is removed from config). Removing a Python warns that

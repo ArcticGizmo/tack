@@ -520,6 +520,40 @@ public sealed class PathDoctorTests : IDisposable
     }
 
     [Fact]
+    public void A_missing_managed_version_says_how_to_put_it_back()
+    {
+        string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
+        var config = NodeAt(Path.Combine(_root, "gone"));
+        config.Tools["node"].Versions["1"].Install = new InstallReceipt { Source = "nodejs.org" };
+
+        var report = PathDoctor.Run(config, shims, FakeSearch.Of(null, shims));
+
+        var check = Assert.Single(report.Checks, c => c.Title == "Missing binDir for node@1");
+        Assert.Contains("'tack tool install node@1' puts it back", check.Detail);
+    }
+
+    [Fact]
+    public void Reports_unregistered_install_folders_and_leftovers()
+    {
+        string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;
+
+        var report = PathDoctor.Run(NodeAt(_root), shims, FakeSearch.Of(null, shims),
+            unregisteredInstalls: new[]
+            {
+                new Tack.Core.Installs.UnregisteredFolder(@"C:\i\node\9.0.0", Owned: true),
+                new Tack.Core.Installs.UnregisteredFolder(@"C:\i\python\3.9.0", Owned: false),
+            },
+            installLeftovers: new[] { @"C:\i\.trash\abc" });
+
+        var folders = report.Checks.Where(c => c.Title == "Install folder nothing is registered for").ToList();
+        Assert.All(folders, c => Assert.Equal(CheckStatus.Warn, c.Status));
+        Assert.Contains(folders, c => c.Detail.StartsWith(@"C:\i\node\9.0.0: tack installed it; tack doctor --fix deletes it"));
+        Assert.Contains(folders, c => c.Detail.StartsWith(@"C:\i\python\3.9.0: tack didn't install it") && c.Detail.Contains("left alone"));
+        var leftovers = Assert.Single(report.Checks, c => c.Title == "Leftovers from an unfinished install or removal");
+        Assert.Contains(@"C:\i\.trash\abc", leftovers.Detail);
+    }
+
+    [Fact]
     public void Fails_when_another_account_can_write_a_tack_folder()
     {
         string shims = Directory.CreateDirectory(Path.Combine(_root, "shims")).FullName;

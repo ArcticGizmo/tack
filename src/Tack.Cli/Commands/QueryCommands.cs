@@ -46,6 +46,8 @@ public sealed class InfoCommand : Command<InfoSettings>
             {
                 string? target = BinaryLocator.Locate(r.BinDirs, tool, File.Exists);
                 tree.AddNode($"binary: {Markup.Escape(target ?? $"(no '{tool}' in {string.Join(" or ", r.BinDirs)})")}");
+                if (config.Tools[tool].Versions.TryGetValue(r.Version!, out var iv) && iv.Install is { } install)
+                    tree.AddNode($"[grey]{Markup.Escape(Render.Source(install))}[/]");
             }
             if (Shadow(env, tool) is { } shadow)
                 tree.AddNode($"[yellow]not intercepted:[/] {Markup.Escape(shadow.Advice)}");

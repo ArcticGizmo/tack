@@ -297,6 +297,46 @@ public sealed class InstallerTests : IDisposable
     }
 
     [Fact]
+    public async Task A_version_a_program_is_running_from_is_left_untouched()
+    {
+        // Windows lets a folder be renamed while an exe in it runs, so this is checked separately from the rename.
+        var installer = new Installer(_root, _net, _runner, () => Now, runningFrom: _ => new[] { "node.exe (pid 42)" });
+        await installer.InstallAsync(NodePlan(Zip(NodeFiles)));
+
+        var e = Assert.Throws<InstallException>(() => installer.Remove(Target));
+
+        Assert.Contains("is in use by node.exe (pid 42), so nothing was removed", e.Message);
+        Assert.True(File.Exists(Path.Combine(Target, Installer.MarkerFile)));
+        Assert.Empty(Entries(Path.Combine(_root, ".trash")));
+    }
+
+    [Fact]
+    public void Running_processes_are_found_by_their_folder()
+    {
+        // A real process: the test stub waits on its stdin, so it keeps running from a folder until that's closed.
+        string bin = AppContext.BaseDirectory;
+        Directory.CreateDirectory(Target);
+        foreach (var f in Directory.GetFiles(bin, "tack-stub.*"))
+            File.Copy(f, Path.Combine(Target, Path.GetFileName(f)));
+        using var stub = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Path.Combine(Target, "tack-stub.exe"))
+        {
+            UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
+        })!;
+        try
+        {
+            var running = Tack.Core.Platform.RunningProcesses.From(Target);
+            Assert.Equal($"tack-stub.exe (pid {stub.Id})", Assert.Single(running));
+            Assert.Empty(Tack.Core.Platform.RunningProcesses.From(Path.Combine(_root, "node", "1.0"))); // a name prefix isn't inside
+        }
+        finally
+        {
+            stub.StandardInput.Close();
+            stub.WaitForExit(10_000);
+        }
+        Assert.Empty(Tack.Core.Platform.RunningProcesses.From(Target));
+    }
+
+    [Fact]
     public void A_folder_outside_the_installs_folder_is_never_deleted()
     {
         string outside = Directory.CreateTempSubdirectory("tack-not-installs-").FullName;
@@ -383,6 +423,73 @@ public sealed class InstallerTests : IDisposable
             Assert.True(File.Exists(Path.Combine(real, "precious.txt")));
         }
         finally { Directory.Delete(Target); Directory.Delete(real, true); }
+    }
+
+    // ---- keep-files, unregistered folders, leftovers ----
+
+    [Fact]
+    public async Task Disowning_keeps_the_files_and_tack_never_deletes_them_after()
+    {
+        var installer = NewInstaller();
+        await installer.InstallAsync(NodePlan(Zip(NodeFiles)));
+
+        Assert.True(installer.Disown(Target));
+
+        Assert.True(File.Exists(Path.Combine(Target, "node.exe")));
+        Assert.False(File.Exists(Path.Combine(Target, Installer.MarkerFile)));
+        Assert.Throws<InstallException>(() => installer.Remove(Target)); // no marker any more
+        Assert.Equal(new[] { new UnregisteredFolder(Target, Owned: false) }, installer.Unregistered(new()));
+    }
+
+    [Fact]
+    public void Disowning_a_folder_tack_did_not_make_changes_nothing()
+    {
+        Directory.CreateDirectory(Target);
+        File.WriteAllText(Path.Combine(Target, "node.exe"), "MZ");
+        Assert.False(NewInstaller().Disown(Target));
+        Assert.True(File.Exists(Path.Combine(Target, "node.exe")));
+    }
+
+    [Fact]
+    public async Task Finds_folders_nothing_is_registered_for()
+    {
+        var installer = NewInstaller();
+        var installed = await installer.InstallAsync(NodePlan(Zip(NodeFiles)));
+        string stray = Directory.CreateDirectory(Path.Combine(_root, "python", "3.12.10")).FullName; // no marker
+        Directory.CreateDirectory(Path.Combine(_root, ".staging", "x")); // dot-folders are never versions
+
+        var config = new Tack.Core.Config.CentralConfig();
+        Assert.Equal(
+            new[] { new UnregisteredFolder(Target, Owned: true), new UnregisteredFolder(stray, Owned: false) },
+            installer.Unregistered(config).OrderBy(f => f.Path.Contains("python")));
+
+        Tack.Core.Config.ToolRegistry.Register(config, "node", "1.0.0", installed);
+        Assert.Equal(new[] { new UnregisteredFolder(stray, Owned: false) }, installer.Unregistered(config));
+    }
+
+    [Fact]
+    public void Leftovers_are_listed_and_swept()
+    {
+        var installer = NewInstaller();
+        Assert.Empty(installer.Leftovers());
+        Directory.CreateDirectory(Path.Combine(_root, ".staging", "dead"));
+        File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(_root, ".trash")).FullName, "old.txt"), "x");
+
+        Assert.Equal(2, installer.Leftovers().Count);
+        Assert.Empty(installer.SweepLeftovers());
+        Assert.Empty(installer.Leftovers());
+    }
+
+    [Fact]
+    public async Task An_installer_without_a_network_can_remove_but_not_install()
+    {
+        await NewInstaller().InstallAsync(NodePlan(Zip(NodeFiles)));
+        var offline = new Installer(_root);
+
+        offline.Remove(Target);
+
+        Assert.False(Directory.Exists(Target));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => offline.InstallAsync(NodePlan(Zip(NodeFiles))));
     }
 
     // ---- helpers ----
