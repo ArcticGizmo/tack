@@ -15,18 +15,19 @@ Already know you want it? [Skip the details and install it ▼](#installing)
 
 ### At a glance
 
-- **Reaches what shell hooks can't.** `nvm use` and `mise activate` only change a shell that ran a hook. tack's shims are real files on PATH, so a GUI, a service and a terminal all hit them the same way.
+- **Reaches what shell hooks can't.** `nvm use` and `mise activate` only change a shell that ran a hook. tack's shims are real files on PATH, so a GUI, a scheduled task and a terminal all hit them the same way, as long as they run as you.
 - **Bring your own installs.** tack doesn't download anything. Register what you already have (winget, an archive, nvm-windows) and tack handles the dispatch.
 - **Pin it in the repo**, with a two-line `tack.yml` that's picked up the moment it's saved. No reshim needed.
 - **…or pin it without touching the repo.** A **zone** pins a directory and everything under it from your machine's own config. For the employer repo where nobody wants your tooling files committed.
 - **Always explains itself.** `tack info` tells you which version a directory gets *and the exact rule that won*.
 - **Invisible where it isn't configured.** No rule? The command falls straight through to whatever was next on PATH, as if tack weren't there.
-- **An off switch.** `tack disable` / `tack enable`, instantly, with no PATH edits and no admin rights.
-- **A doctor that fixes things.** `tack doctor` names whatever is shadowing the shims (looking at you, nvm-windows); `tack doctor --fix` sorts it out.
+- **An off switch.** `tack disable` / `tack enable`, instantly, just for you, with no PATH edits and no admin rights.
+- **A doctor that fixes things.** `tack doctor` names whatever gets to a command before tack does (looking at you, nvm-windows) and says what to do about it; `tack doctor --fix` sorts out what's tack's to sort.
+- **No admin, ever.** tack lives in your profile and only touches your own user PATH. Nothing it installs is visible to SYSTEM, services or anyone else on the machine.
 
 ## How it works
 
-tack puts one directory of tiny proxy executables — **shims** — at the front of your PATH. There's one per command it manages: `node.exe`, `npm.exe`, `npx.exe`, `python.exe`… When something runs `node`, it's the shim that starts. The shim looks at the caller's working directory, decides which registered version applies there, then runs that version's real binary with the same arguments, streams and Ctrl-C handling, and exits with its exit code.
+tack puts one directory of tiny proxy executables — **shims** — at the front of your user PATH. There's one per command it manages: `node.exe`, `npm.exe`, `npx.exe`, `python.exe`… When something runs `node`, it's the shim that starts. The shim looks at the caller's working directory, decides which registered version applies there, then runs that version's real binary with the same arguments, streams and Ctrl-C handling, and exits with its exit code.
 
 The shim is a NativeAOT binary built for fast start-up, since it runs on every single tool call. It reads one precompiled lookup file and only goes looking for a `tack.yml` on disk when there is one.
 
@@ -37,7 +38,7 @@ Commands a version ships alongside its main binary always follow it. Pin `node@2
 For any directory, tack takes the first rule that applies, top to bottom:
 
 1. **`TACK_<TOOL>_VERSION`** environment variable, e.g. `TACK_NODE_VERSION=18.19.0`. The escape hatch, handy in CI.
-2. **An enforced zone.** A zone marked `--enforce` beats the repo's own `tack.yml`.
+2. **A zone that ignores tack files.** A zone added with `--ignore-tack-files` beats the repo's own `tack.yml`.
 3. **The nearest `tack.yml`**, walking up from the current directory to the drive root.
 4. **The deepest zone** containing the current directory.
 5. **The tool's default**, which is the first version you registered.
@@ -66,7 +67,7 @@ tack zone add C:\work\employer\new-thing node@22   # deeper zones win
 
 A zone is a plain directory, and it covers itself and everything under it. Every zone that applies to a directory is one of its parents, so the deepest one always wins outright. There's no specificity scoring and there are no ties. Adding a zone that already exists for the same directory and tool updates it. `tack zone list` shows them all, and `tack zone remove` with no arguments opens an interactive picker.
 
-- **`--enforce`** lifts a zone above a repo's `tack.yml`, for when the machine's rule has to win.
+- **`--ignore-tack-files`** lifts a zone above a repo's `tack.yml`, for when the machine's rule has to win.
 - **`node@none`** switches tack off for node in that directory tree, so `node` runs whatever is next on PATH. A deeper zone can switch it back on.
 - **`none`** on its own (`tack zone add C:\legacy none`) switches tack off for *every* tool there, including ones you register later.
 
@@ -121,15 +122,27 @@ The variables live only in your machine's config. A `tack.yml` can pick `claude:
 
   Logging adds a little to every tool call, so switch it off when you're done. When it's off it costs nothing. The log rolls over to `shim.log.1` at 5 MB, so a log you forget about can't eat the disk.
 
-### PATH repair
+### Your PATH, and what tack can't reach
 
-Windows builds the effective PATH as *system entries, then user entries*. A shims dir on the user PATH therefore still loses to any system-wide Node or Python. **`tack doctor --fix`** regenerates the shims and moves the shims dir to the **front of the system PATH**. It asks for elevation through UAC for that one write, and only that write.
+Windows builds a process's PATH as *system entries, then user entries*. tack's shims go first on your **user** PATH, so they beat everything installed just for you (scoop, the Microsoft Store's `python` alias), but anything on the **system** PATH comes first. A Node installed for all users, Git for Windows' `git`, a system-wide Python: tack can't get in front of those, and it doesn't try.
 
-It edits the registry value directly, so tokens like `%SystemRoot%\system32` and `%NVM_HOME%` stay as tokens instead of being baked into literal paths. It prints the full before/after and saves a timestamped backup under `%LocalAppData%\tack\path-backups\`, so any edit can be undone by hand. The user PATH is left alone.
+Instead it tells you. `tack tool add`, `tack info`, `tack which` and `tack doctor` all say when a plain call won't reach tack:
+
+```text
+'node' isn't intercepted: C:\Program Files\nodejs\node.exe comes first (system PATH entry 4). To let tack
+manage node, uninstall that copy or take its folder off the system PATH (needs admin), then register the
+versions you want with tack
+```
+
+Moving it is your call, and the only change that needs admin. Install the versions you want per-user (or keep the system-wide one and register its folder with tack), and take the system-wide folder off the system PATH. Windows' own commands (`curl`, `tar`, `where`, `ssh`) can't be moved at all, so `tool add` won't take them on.
+
+Why not just go on the system PATH? Every account on the machine searches it, SYSTEM and services included, and tack's shims live in a folder you can write. That combination lets any program running as you plant code that SYSTEM later runs. tack 0.1.x did exactly that; [ADR 0002](docs/adr/0002-shims-on-the-user-path.md) explains the fix.
+
+**`tack doctor --fix`** restamps the shims, removes ones your config no longer uses, and moves the shims dir back to the front of your user PATH if an installer has put something ahead of it. It edits the registry value directly, so tokens like `%USERPROFILE%` stay as tokens instead of being baked into literal paths. It prints the full before/after and saves a timestamped backup in `%LocalAppData%\tack\path-backups\`, so any edit can be undone by hand. It never touches the system PATH; if `doctor` finds a tack folder there (0.1.x put one there), it says how to remove it.
 
 ### The off switch
 
-`tack disable` parks the shims folder under another name. The PATH entry then points at nothing, and every tool falls straight through to the real PATH, even in shells that are already open. `tack enable` puts it back. There are no PATH edits and no admin prompt, which makes this the quickest way to answer "is this tack's fault?"
+`tack disable` switches tack off for you. The shims stay on PATH, but each one passes your call straight through to the next match on PATH, even in shells that are already open. `tack enable` switches it back on. It's a setting in your own config, so it needs no PATH edits or admin prompt and doesn't affect anyone else on the machine. That makes it the quickest way to answer "is this tack's fault?"
 
 Configuration keeps working while tack is disabled: add tools and zones as normal, and they go live the moment you re-enable.
 
@@ -137,8 +150,10 @@ Configuration keeps working while tack is disabled: add tools and zones as norma
 
 - **`tack changelog`** shows what's new in the latest release (`--all` for the full history).
 - The shims carry honest Windows file metadata, so a copied `node.exe` identifies itself as tack rather than as an anonymous unsigned binary.
-- Reshims leave unchanged shims alone. A shim that's in use, or being scanned by antivirus, is moved aside rather than causing an error.
-- tack only ever writes the **system** PATH, never your user PATH. That write, and nothing else, asks for admin through UAC: once at install (`tack setup`), and again on `doctor --fix` or uninstall.
+- Stamping leaves identical shims alone (it compares their contents). A shim that's in use, or being scanned by antivirus, is moved aside rather than causing an error.
+- tack only ever writes its own entries in your **user** PATH, never the system PATH, and never asks for admin.
+- Removing a tool removes its shims too.
+- `tack doctor` checks that nobody but you (and SYSTEM and Administrators) can write tack's folders, since anything there runs in your sessions.
 
 ## Installing
 
@@ -146,14 +161,14 @@ Configuration keeps working while tack is disabled: add tools and zones as norma
 irm https://raw.githubusercontent.com/ArcticGizmo/tack/main/install.ps1 | iex
 ```
 
-That's the whole install. tack installs to `%LocalAppData%\Tack\` and adds a normal uninstaller under Settings → Apps. Then `tack setup` puts the shims dir at the **front of the system PATH** and `tack` at the end of it, which takes a single UAC prompt. Your user PATH is never touched. If you decline the prompt, tack is installed but isn't on PATH yet; run `& "$env:LOCALAPPDATA\Tack\current\tack.exe" setup` to try again. Open a **new** terminal afterwards so it picks up the PATH change, then:
+That's the whole install, and it needs no admin. tack installs to `%LocalAppData%\Tack\`, adds a normal uninstaller under Settings → Apps, and puts the shims dir at the **front of your user PATH** and `tack` at the end of it. If anything went wrong with the PATH, `& "$env:LOCALAPPDATA\Tack\current\tack.exe" setup` puts it right. Open a **new** terminal afterwards so it picks up the PATH change, then:
 
 ```powershell
 tack tool add node@20.11.0
 tack info
 ```
 
-What the script does, in order: resolves the latest release, fetches `SHA256SUMS.txt` and `Tack-win-Setup.exe`, **checks the installer against the manifest and deletes it rather than run it on any mismatch**, then hands off to the installer and runs `tack setup` in your terminal. It's [`install.ps1`](install.ps1) in this repo — read it before piping it into your shell, the same as you should with any installer.
+What the script does, in order: resolves the latest release, fetches `SHA256SUMS.txt` and `Tack-win-Setup.exe`, **checks the installer against the manifest and deletes it rather than run it on any mismatch**, then hands off to the installer and runs `tack setup` in your terminal to show where tack landed. It's [`install.ps1`](install.ps1) in this repo — read it before piping it into your shell, the same as you should with any installer.
 
 Pin a version instead of taking the latest:
 
@@ -167,8 +182,7 @@ Because PowerShell rather than a browser does the downloading, nothing is tagged
 
 Prefer to click things: download `Tack-win-Setup.exe` from the
 [latest release](https://github.com/ArcticGizmo/tack/releases/latest) and run it. Identical install,
-identical self-updates. The first launch after Setup opens a small first-time setup window that runs
-`tack setup` (the UAC prompt for the system PATH).
+identical self-updates.
 
 A browser download *is* tagged with the mark-of-the-web, so SmartScreen shows the blue **"Windows protected
 your PC"** dialog — click **More info → Run anyway**, or use the one-liner above and skip it. To check the
@@ -185,7 +199,7 @@ tack copies one small exe under the names of real tools and puts it on PATH. Tha
 
 ### Uninstalling
 
-Uninstall from Settings → Apps. tack's system PATH entries are removed (one UAC prompt), but your registry, zones and shims under `%LocalAppData%\tack\` are kept, so a reinstall picks up where you left off. Delete that folder too if you want a clean slate.
+Uninstall from Settings → Apps. tack's user PATH entries are removed, but your registry, zones and shims under `%LocalAppData%\tack\` are kept, so a reinstall picks up where you left off. Delete that folder too if you want a clean slate.
 
 ## Updating
 
@@ -277,18 +291,24 @@ dotnet test             # the test suite
 front end, and `Tack.Shim` is the NativeAOT proxy. The CLI only formats output: every decision is made in
 Core, so it's all unit-testable.
 
-Debug builds run as an isolated **dev profile**. They keep their own config, shims and `resolved.json` under
-`%LocalAppData%\tack (Dev)\`, so hacking on tack never touches your real setup. Set `TACK_DEV=0` to point a
-debug build at the real profile, or `TACK_DEV=1` to force a release build into dev.
+Debug builds run as an isolated **dev profile**. They keep their own config, `resolved.json` and shims under
+`%LocalAppData%\tack (Dev)\`, so hacking on tack never touches your real setup. After a rebuild,
+`run.bat reshim` refreshes the dev shims. Set `TACK_DEV=0` to point a debug build at the real profile, or
+`TACK_DEV=1` to force a release build into dev.
 
-To try a dev build as if it were really installed, run `run.bat doctor --fix`. This puts the dev shims at the
-front of the system PATH, **directly behind** the release tack's. The dev build then beats every real install
-but never the release tack. Run the release `tack disable` to hand shared commands like `node` over to dev,
-and `tack enable` to take them back.
+To try a dev build as if it were really installed, run `run.bat setup`. This puts the dev shims on your user
+PATH, **directly behind** the release tack's. The dev build then beats every per-user install but never the
+release tack. Run the release `tack disable` to hand shared commands like `node` over to dev, and
+`tack enable` to take them back. `run.bat setup --remove` takes the dev shims off your PATH again.
 
 Useful switches for debugging the shim:
 
 - `TACK_SHIM_DEBUG=1` makes the shim trace its decisions to stderr.
-- `TACK_RESOLVED=<path>` points the shim at a specific `resolved.json`.
+- `TACK_RESOLVED=<path>` points the shim at a specific `resolved.json`. If that file doesn't exist, the shim
+  treats it as no config and passes straight through.
+
+Without `TACK_RESOLVED`, a shim reads only the `resolved.json` in the calling account's own `%LocalAppData%`. It
+picks `tack` or `tack (Dev)` from the name of the folder its shims folder is in (not from `TACK_DEV`). An account
+with no config, such as SYSTEM, a service or another user, just gets passthrough.
 
 [`tools/bench-shim.ps1`](tools/bench-shim.ps1) measures the shim's start-up overhead against a stub tool.

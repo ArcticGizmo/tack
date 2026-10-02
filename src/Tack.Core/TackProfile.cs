@@ -3,9 +3,9 @@ namespace Tack.Core;
 /// <summary>
 /// Selects the app "profile" so a development instance can run without clobbering an installed release's
 /// data. Dev mode uses a separate data directory (<c>tack (Dev)</c> instead of <c>tack</c>) under
-/// %LOCALAPPDATA% - a separate config.json, resolved.json and shims dir - so a `dotnet run` / `run.bat`
-/// build never touches the config, shims or PATH wiring of a real installed tack. Ported from perch's
-/// AppProfile.
+/// %LOCALAPPDATA%, with its own shims (see <see cref="TackPaths"/>), so a `dotnet run` / `run.bat` build never
+/// touches the config, shims or PATH entries of a real installed tack.
+/// Ported from perch's AppProfile.
 ///
 /// It's on automatically for <b>Debug</b> builds (so local dev is isolated with zero ceremony) and can be
 /// forced either way with the <c>TACK_DEV</c> environment variable: any non-empty value other than
@@ -17,8 +17,27 @@ public static class TackProfile
     /// <summary>True when running as an isolated development instance (see the type remarks).</summary>
     public static bool IsDev { get; } = ComputeIsDev();
 
+    /// <summary>The release profile's %LOCALAPPDATA% subfolder.</summary>
+    public const string ReleaseDataFolder = "tack";
+
+    /// <summary>The dev profile's %LOCALAPPDATA% subfolder.</summary>
+    public const string DevDataFolder = "tack (Dev)";
+
     /// <summary>The %LOCALAPPDATA% subfolder for this profile - <c>tack</c> or <c>tack (Dev)</c>.</summary>
-    public static string DataFolderName => IsDev ? "tack (Dev)" : "tack";
+    public static string DataFolderName => IsDev ? DevDataFolder : ReleaseDataFolder;
+
+    /// <summary>
+    /// The data folder a shim living in <paramref name="shimsDir"/> belongs to: <see cref="DevDataFolder"/> when the
+    /// shims folder sits in one named <c>tack (Dev)</c> (any case), else <see cref="ReleaseDataFolder"/>. The shim
+    /// uses this instead of <see cref="IsDev"/>, so a Release-built shim stamped into the dev folder still reads the
+    /// dev config, and a <c>TACK_DEV</c> left in the environment can't point a release shim at the dev config.
+    /// </summary>
+    public static string ForShimsDir(string shimsDir)
+    {
+        string? owner = Path.GetFileName(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(shimsDir)));
+        return string.Equals(owner, DevDataFolder, StringComparison.OrdinalIgnoreCase)
+            ? DevDataFolder : ReleaseDataFolder;
+    }
 
     /// <summary>Suffix for user-facing labels (window title, doctor) - <c>""</c> or <c>" (Dev)"</c>.</summary>
     public static string DisplaySuffix => IsDev ? " (Dev)" : "";

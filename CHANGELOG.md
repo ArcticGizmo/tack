@@ -9,6 +9,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.2.0] - 2026-10-02
+
+- tack leaves the system PATH for your user PATH
+- SYSTEM, services and other accounts never run anything from your profile
+- No admin and no UAC prompts, for anything, ever
+- Commands a system-wide install reaches first are named, with what to do
+- Windows' own `curl` and friends are politely declined
+- `tack doctor` checks nobody else can write tack's folders
+- It also fails while any tack folder lingers on the system PATH
+- `tack setup --remove` takes tack back off your PATH
+- Removing a tool takes its shims with it
+- `tack disable` is instant, and switches tack off for you alone
+- `.cmd` tools get their `&`, `%` and quotes intact (npm, mostly)
+- `zone add --ignore-tack-files` says what it does, unlike its predecessor
+- Zones that beat a `tack.yml` forget they did; add them again
+
+---
+
 ## [v0.1.7] - 2026-09-29
 
 - `tool add --env NAME=VALUE` gives a version its own variables
@@ -70,9 +88,9 @@ The first tack: per-directory tool dispatch that reaches the processes shell hoo
 - Sibling commands follow their tool: pin `node@20` and `npm`/`npx` there are node 20's too
 - `tack.yml` project files, discovered by walking up from the current directory and picked up the moment they exist - no reshim required
 - Zones: pin a directory, and everything under it, to a tool version without committing a thing to the repo. The deepest zone wins, and since zones are plain directories there's never a tie to argue about
-- `--enforce` zones beat a repo's `tack.yml`, for when the machine's rule has to win
+- Zones can beat a repo's `tack.yml`, for when the machine's rule has to win
 - `none` zones switch tack off for a tool (`node@none`) or for every tool (`none`) in a directory tree, so commands fall through to whatever is next on PATH
-- Resolution precedence you can actually explain: env override (`TACK_<TOOL>_VERSION`), enforced zone, `tack.yml`, zone, default, then passthrough
+- Resolution precedence you can actually explain: env override (`TACK_<TOOL>_VERSION`), zone that beats `tack.yml`, `tack.yml`, zone, default, then passthrough
 - Versions match by dotted prefix, so `python: "3.12"` means the highest `3.12.x` you have (and never `3.121`)
 - Passthrough when nothing matches - tack stays invisible where it isn't configured
 - `tack tool add` / `remove` / `list` - bring your own installs. `add` finds the tool on PATH for you (expanding `%NVM_HOME%`-style entries) and works out which commands it provides; `remove` is an interactive picker that tidies up defaults and flags any zone left pointing at nothing

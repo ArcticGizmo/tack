@@ -18,9 +18,9 @@ public sealed class ZonesAddSettings : CommandSettings
     [Description("e.g. node@18.19.0 (a prefix like node@18 picks the highest registered 18.x), node@none to turn tack off for node here, or just none to turn it off for every tool")]
     public string Spec { get; init; } = "";
 
-    [CommandOption("--enforce")]
-    [Description("Make this zone beat a repo tack.yml (org enforcement).")]
-    public bool Enforce { get; init; }
+    [CommandOption("--ignore-tack-files")]
+    [Description("Apply this zone even where a repo's tack.yml picks another version.")]
+    public bool IgnoreTackFiles { get; init; }
 
     public override ValidationResult Validate()
     {
@@ -52,14 +52,14 @@ public sealed class ZonesAddCommand : Command<ZonesAddSettings>
         string version = none ? ZoneVersion.None : spec.Version!;
         var config = env.Load();
 
-        var result = ZoneRegistry.Set(config, dir, spec.Tool, version, settings.Enforce);
+        var result = ZoneRegistry.Set(config, dir, spec.Tool, version, settings.IgnoreTackFiles);
         env.Save(config);
 
         var zone = new Zone { Path = dir, Tool = spec.Tool, Version = version };
         string what = $"{Markup.Escape(dir)} -> {Markup.Escape(ZoneText.Spec(zone))}"
-            + (settings.Enforce ? " [red](enforced)[/]" : "");
+            + (settings.IgnoreTackFiles ? " [red](ignores tack files)[/]" : "");
         if (result.Previous is { } p)
-            AnsiConsole.MarkupLine($"[green]updated zone[/] {what} [grey](was {Markup.Escape(p.Version)}{(p.Enforce ? ", enforced" : "")})[/]");
+            AnsiConsole.MarkupLine($"[green]updated zone[/] {what} [grey](was {Markup.Escape(p.Version)}{(p.IgnoreTackFiles ? ", ignoring tack files" : "")})[/]");
         else
             AnsiConsole.MarkupLine($"[green]added zone[/] {what}");
 
@@ -67,8 +67,8 @@ public sealed class ZonesAddCommand : Command<ZonesAddSettings>
         {
             string subject = all ? "any tool" : spec.Tool;
             string overrides = all
-                ? (settings.Enforce ? "a tool's own enforced zone" : "a tool's own zone or a tack.yml")
-                : (settings.Enforce ? "a deeper enforced zone" : "a deeper zone or a tack.yml");
+                ? (settings.IgnoreTackFiles ? "a tool's own zone that ignores tack files" : "a tool's own zone or a tack.yml")
+                : (settings.IgnoreTackFiles ? "a deeper zone that ignores tack files" : "a deeper zone or a tack.yml");
             AnsiConsole.MarkupLine($"[grey]tack won't resolve {Markup.Escape(subject)} here or below (unless {overrides} says otherwise) - commands go to the next one on PATH.[/]");
         }
         if (!Directory.Exists(dir))
@@ -76,7 +76,7 @@ public sealed class ZonesAddCommand : Command<ZonesAddSettings>
         // An all-tools zone covers whatever is registered, now or later - nothing to check.
         if (!all) NoteRegistration(config, spec.Tool, version, none);
 
-        Mutations.ReportReshim(env.Reshim(config));
+        Shims.Sync(env, config);
         return 0;
     }
 
@@ -107,12 +107,12 @@ public sealed class ZonesListCommand : Command
         table.AddColumn("directory");
         table.AddColumn("tool");
         table.AddColumn("version");
-        table.AddColumn("enforced");
+        table.AddColumn("ignore tack files");
         foreach (var z in zones)
             table.AddRow(Markup.Escape(z.Path),
                 ZoneTool.IsAll(z.Tool) ? "[yellow]all tools[/]" : Markup.Escape(z.Tool),
                 ZoneVersion.IsNone(z.Version) ? "[yellow]none[/] [grey](tack off)[/]" : Markup.Escape(z.Version),
-                z.Enforce ? "[red]yes[/]" : "");
+                z.IgnoreTackFiles ? "[red]yes[/]" : "");
         AnsiConsole.Write(table);
         return 0;
     }
@@ -174,7 +174,7 @@ public sealed class ZonesRemoveCommand : Command<ZonesRemoveSettings>
         env.Save(config);
         foreach (var z in removed)
             AnsiConsole.MarkupLine($"[green]removed zone[/] {Markup.Escape(z.Path)} -> {Markup.Escape(ZoneText.Spec(z))}");
-        Mutations.ReportReshim(env.Reshim(config));
+        Shims.Sync(env, config);
         return 0;
     }
 
@@ -203,7 +203,7 @@ public sealed class ZonesRemoveCommand : Command<ZonesRemoveSettings>
     }
 
     private static string Label(Zone z) =>
-        $"{z.Path}  {ZoneText.Spec(z)}{(z.Enforce ? "  (enforced)" : "")}";
+        $"{z.Path}  {ZoneText.Spec(z)}{(z.IgnoreTackFiles ? "  (ignores tack files)" : "")}";
 }
 
 internal static class ZoneText

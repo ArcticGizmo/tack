@@ -7,20 +7,14 @@ using Velopack;
 // tack CLI.
 //
 // Velopack requires its bootstrap as the very first thing in the main exe's entry point. tack.exe is the
-// Velopack mainExe, so it owns the install lifecycle: on install/update it regenerates shims from existing
-// config with this build's shim binary; on the first run after install it puts the shims dir + install dir on
-// the SYSTEM PATH (one UAC prompt - tack never touches the user PATH); on uninstall it strips those entries.
-// On a normal run these are no-ops and Run() returns. Then a Spectre.Console command app dispatches. Every
-// command is a thin shell over Tack.Core (Core decides; the CLI formats).
+// Velopack mainExe, so it owns the install lifecycle: on install/update it puts the shims dir + install dir on
+// the USER PATH (no admin; tack never touches the system PATH) and regenerates shims from existing config with
+// this build's shim binary; on uninstall it strips those entries. On a normal run these are no-ops and Run()
+// returns. Then a Spectre.Console command app dispatches. Every command is a thin shell over Tack.Core (Core
+// decides; the CLI formats).
 var velopack = VelopackApp.Build();
 if (OperatingSystem.IsWindows()) velopack = InstallHook.Wire(velopack);
 velopack.Run();
-
-if (OperatingSystem.IsWindows() && InstallHook.IsFirstRun)
-{
-    int setup = InstallHook.FirstTimeSetup();
-    if (args.Length == 0) return setup; // Setup's own launch: show the setup result, not the help screen
-}
 
 var app = new CommandApp();
 app.Configure(cfg =>
@@ -44,11 +38,11 @@ app.Configure(cfg =>
             .WithDescription("List registered tools and versions (--expand for copyable paths).");
     }).WithAlias("tools");
     cfg.AddCommand<SetupCommand>("setup")
-        .WithDescription("Put tack on the system PATH (prompts for elevation). Run by the installer; re-run if you declined.");
+        .WithDescription("Put tack on your user PATH and stamp your shims. The installer does this; re-run it to repair (--remove to undo).");
     cfg.AddCommand<DoctorCommand>("doctor")
         .WithDescription("Diagnose PATH and shim health (--fix to repair).");
     cfg.AddCommand<DisableCommand>("disable")
-        .WithDescription("Turn tack off: park the shims dir so tools fall through to the real PATH.");
+        .WithDescription("Turn tack off for you: your tool calls fall through to the rest of PATH.");
     cfg.AddCommand<EnableCommand>("enable")
         .WithDescription("Turn tack back on after 'tack disable'.");
     cfg.AddBranch<CommandSettings>("zone", zone =>
@@ -82,9 +76,6 @@ app.Configure(cfg =>
     // hand-edit of config.json.
     cfg.AddCommand<ReshimCommand>("reshim").IsHidden()
         .WithDescription("Recompile central config and regenerate the shims.");
-
-    // Hidden: the elevated half of `tack doctor --fix` (machine-PATH write). Invoked via a UAC relaunch.
-    cfg.AddCommand<ApplyMachinePathCommand>("apply-machine-path").IsHidden();
 });
 
 return app.Run(args);

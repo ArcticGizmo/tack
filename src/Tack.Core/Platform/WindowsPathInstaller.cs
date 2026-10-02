@@ -4,68 +4,68 @@ using System.Runtime.Versioning;
 namespace Tack.Core.Platform;
 
 /// <summary>
-/// Windows PATH installer. tack only ever edits the SYSTEM (machine) PATH - never the user PATH. On Windows the
-/// effective PATH is machine entries then user entries, so a user-PATH shims dir loses to every system-wide tool
-/// install; and tack must not scribble on the user's own PATH. The shims dir goes to the FRONT (it must win over
-/// other tool installs like nvm-windows) and the Velopack install dir is appended so tack.exe resolves.
+/// Windows PATH installer. tack only ever edits the USER PATH, and only its own entries; it never writes the system
+/// PATH (ADR 0002). The shims dir goes to the FRONT of the user PATH, so it wins over other per-user installs
+/// (scoop, the WindowsApps aliases); a dev instance goes just behind the release shims instead. The install dir, if
+/// given, is appended so tack.exe resolves. Anything on the system PATH still comes first - that's what the
+/// shadow report is for.
 ///
 /// Every write goes through <see cref="WindowsEnvRegistry"/> on the raw value, so <c>%VAR%</c> tokens survive and
 /// the value stays <c>REG_EXPAND_SZ</c>, then broadcasts WM_SETTINGCHANGE so new processes see it without a
-/// logoff. Writing HKLM needs admin: unelevated, the writes throw (ERROR_ACCESS_DENIED) and the caller decides
-/// whether to relaunch elevated through UAC. Reads (<see cref="NeedsRegister"/>) work unelevated.
+/// logoff. No admin needed.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class WindowsPathInstaller : IPathInstaller
 {
-    private readonly string _installDir;
-    private readonly string _shimsDir;
+    private readonly string? _installDir;
+    private readonly IReadOnlyList<string>? _behind;
 
-    public WindowsPathInstaller(string? installDir = null, string? shimsDir = null)
+    /// <param name="shimsDir">This profile's shims dir.</param>
+    /// <param name="installDir">The dir holding tack.exe, appended so <c>tack</c> resolves; null to leave it off
+    /// (a dev build runs from its build output).</param>
+    /// <param name="behind">Dirs the shims sit directly behind, if they're on the PATH (a dev instance: the release
+    /// shims); null for the very front.</param>
+    public WindowsPathInstaller(string shimsDir, string? installDir, IReadOnlyList<string>? behind = null)
     {
-        _installDir = (installDir ?? AppContext.BaseDirectory).TrimEnd('\\', '/');
-        _shimsDir = (shimsDir ?? TackPaths.ShimsDir).TrimEnd('\\', '/');
+        ShimsDir = shimsDir.TrimEnd('\\', '/');
+        _installDir = installDir?.TrimEnd('\\', '/');
+        _behind = behind;
     }
 
-    public string InstallDir => _installDir;
-    public string ShimsDir => _shimsDir;
+    public string ShimsDir { get; }
 
-    /// <summary>True when the system PATH doesn't yet have the shims dir at the front and the install dir on it.</summary>
-    public bool NeedsRegister() =>
-        PathEdits.Register(WindowsEnvRegistry.ReadRaw(machine: true), _shimsDir, _installDir) is not null;
+    private IEnumerable<string> Ours => _installDir is null ? new[] { ShimsDir } : new[] { ShimsDir, _installDir };
 
-    /// <summary>True when the system PATH still holds the shims dir or install dir.</summary>
-    public bool NeedsUnregister() =>
-        PathEdits.Remove(WindowsEnvRegistry.ReadRaw(machine: true), new[] { _shimsDir, _installDir }) is not null;
+    /// <summary>True when the user PATH doesn't yet have the shims dir in place and the install dir on it.</summary>
+    public bool NeedsRegister() => Edit(Raw()) is not null;
 
-    /// <summary>Wire the shims dir (front) and install dir onto the system PATH. Needs admin. Returns the
-    /// before/after, or null if it was already in place and nothing was written.</summary>
+    /// <summary>True when the user PATH still holds the shims dir or install dir.</summary>
+    public bool NeedsUnregister() => PathEdits.Remove(Raw(), Ours) is not null;
+
+    /// <summary>Put the shims dir in place on the user PATH (moving it up if something got ahead of it) and the
+    /// install dir on it. Returns the before/after, or null if it was already in place and nothing was written.</summary>
     public PathChange? Register()
     {
-        Directory.CreateDirectory(_shimsDir);
-        return Write(before => PathEdits.Register(before, _shimsDir, _installDir));
+        Directory.CreateDirectory(ShimsDir);
+        return Write(Edit);
     }
 
-    /// <summary>Take tack's entries off the system PATH. Needs admin. Null if they weren't there.</summary>
-    public PathChange? Unregister() =>
-        Write(before => PathEdits.Remove(before, new[] { _shimsDir, _installDir }));
+    /// <summary>Take tack's entries off the user PATH. Null if they weren't there.</summary>
+    public PathChange? Unregister() => Write(before => PathEdits.Remove(before, Ours));
 
-    /// <summary>
-    /// Move the shims dir to the front of the system PATH - the core of <c>tack doctor --fix</c>. With
-    /// <paramref name="behind"/> (a dev instance: the release shims dirs) it lands directly after the first of
-    /// those on PATH instead of at index 0, so dev beats every real install but never the release tack.
-    /// </summary>
-    public PathChange? PromoteShimsOnMachinePath(IEnumerable<string>? behind = null) =>
-        Write(before => PathEdits.PromoteFront(before, _shimsDir, behind));
+    private string? Edit(string before) => PathEdits.Register(before, ShimsDir, _installDir, _behind);
+
+    private static string Raw() => WindowsEnvRegistry.ReadRaw(machine: false);
 
     private static PathChange? Write(Func<string, string?> edit)
     {
-        string before = WindowsEnvRegistry.ReadRaw(machine: true);
+        string before = Raw();
         string? after = edit(before);
         if (after is null) return null;
 
-        WindowsEnvRegistry.WriteMachine(after);
+        WindowsEnvRegistry.WriteUser(after);
         Broadcast();
-        return new PathChange("machine", before, after);
+        return new PathChange("user", before, after);
     }
 
     private const int HWND_BROADCAST = 0xffff;

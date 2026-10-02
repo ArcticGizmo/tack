@@ -11,9 +11,9 @@ namespace Tack.Core.Platform;
 /// (<c>%SystemRoot%\system32</c> -> <c>C:\WINDOWS\system32</c>), and <c>SetEnvironmentVariable</c> writes it
 /// back as a plain <c>REG_SZ</c> - so round-tripping PATH through them destroys the <c>%VAR%</c> tokens and
 /// flips the value's type. That's fine for a throwaway lookup but wrong for editing the machine PATH, where
-/// those tokens (and the <c>REG_EXPAND_SZ</c> type) matter. So <c>tack doctor --fix</c> goes to the registry
-/// directly: read the raw value, edit the raw entries, write it back as <c>REG_EXPAND_SZ</c>. P/Invoke (not the
-/// Microsoft.Win32.Registry package) keeps Tack.Core dependency-free for the NativeAOT shim.
+/// those tokens (and the <c>REG_EXPAND_SZ</c> type) matter. So tack goes to the registry directly: read the raw
+/// value, edit the raw entries, write it back as <c>REG_EXPAND_SZ</c>. P/Invoke (not the Microsoft.Win32.Registry
+/// package) keeps Tack.Core dependency-free for the NativeAOT shim.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public static class WindowsEnvRegistry
@@ -57,14 +57,14 @@ public static class WindowsEnvRegistry
         finally { RegCloseKey(hKey); }
     }
 
-    /// <summary>Write the SYSTEM PATH as <c>REG_EXPAND_SZ</c> (preserving %VAR% tokens). There is deliberately no
-    /// user-scope write: tack never modifies the user PATH. Needs admin - unelevated it throws with
-    /// ERROR_ACCESS_DENIED.</summary>
-    public static void WriteMachine(string value, string valueName = "PATH")
+    /// <summary>Write the USER PATH as <c>REG_EXPAND_SZ</c> (preserving %VAR% tokens). There is deliberately no
+    /// machine-scope write: tack never modifies the system PATH (ADR 0002), so reading it is all this class does
+    /// with HKLM.</summary>
+    public static void WriteUser(string value, string valueName = "PATH")
     {
-        int rc = RegOpenKeyEx(HKEY_LOCAL_MACHINE, MachineSubKey, 0, KEY_SET_VALUE, out IntPtr hKey);
+        int rc = RegOpenKeyEx(HKEY_CURRENT_USER, UserSubKey, 0, KEY_SET_VALUE, out IntPtr hKey);
         if (rc != ERROR_SUCCESS)
-            throw new Win32Exception(rc, $"opening HKLM\\{MachineSubKey} for write failed");
+            throw new Win32Exception(rc, $"opening HKCU\\{UserSubKey} for write failed");
         try
         {
             var bytes = Encoding.Unicode.GetBytes(value + '\0');

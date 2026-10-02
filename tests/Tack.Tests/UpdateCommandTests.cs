@@ -46,3 +46,19 @@ public class ZoneSpecTests
         Assert.Equal(valid, settings.Validate().Successful);
     }
 }
+
+public class ToolsAddValidationTests
+{
+    [Theory]
+    [InlineData("node@20", null, true)]
+    [InlineData("node@20", "node,npm,npx", true)]
+    [InlineData("node@20", @"npm,..\evil", false)]  // every --exposes name must be a plain command name
+    [InlineData("node@20", "npm, two words", false)]
+    [InlineData("con@1", null, false)]               // the tool's own name is shimmed too
+    [InlineData("a/b@1", null, false)]
+    public void Command_names_are_checked_before_anything_is_saved(string spec, string? exposes, bool valid)
+    {
+        var settings = new ToolsAddSettings { Spec = spec, Exposes = exposes };
+        Assert.Equal(valid, settings.Validate().Successful);
+    }
+}

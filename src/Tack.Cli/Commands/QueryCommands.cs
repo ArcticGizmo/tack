@@ -47,6 +47,8 @@ public sealed class InfoCommand : Command<InfoSettings>
                 string? target = BinaryLocator.Locate(r.BinDir, tool, File.Exists);
                 tree.AddNode($"binary: {Markup.Escape(target ?? $"(no '{tool}' in {r.BinDir})")}");
             }
+            if (Shadow(env, tool) is { } shadow)
+                tree.AddNode($"[yellow]not intercepted:[/] {Markup.Escape(shadow.Advice)}");
             if (r.Resolved && r.Env is { Count: > 0 })
             {
                 // Expanded here the way the shim will, so the value shown is the value the tool gets.
@@ -79,6 +81,12 @@ public sealed class InfoCommand : Command<InfoSettings>
         AnsiConsole.Write(table);
         return 0;
     }
+
+    /// <summary>Why a bare <paramref name="tool"/> call won't reach tack's shim, or null if it will (or if that
+    /// can't be told: not Windows, or the shims aren't on PATH yet, which doctor reports).</summary>
+    internal static Shadow? Shadow(TackEnvironment env, string tool) => OperatingSystem.IsWindows()
+        ? CommandSearch.Current().Explain(tool, env.ShimsDir, Tack.Core.TackPaths.User.AllShimsDirs)
+        : null;
 }
 
 // ---- which ---------------------------------------------------------------------------------------
@@ -107,6 +115,9 @@ public sealed class WhichCommand : Command<WhichSettings>
             return 1;
         }
         Console.WriteLine(target); // plain + scriptable, like `mise which`
+        // Still what tack resolves, but a plain call won't get there: say so where scripts won't read it.
+        if (InfoCommand.Shadow(env, settings.Tool) is { } shadow)
+            Console.Error.WriteLine($"warning: a plain '{settings.Tool}' call isn't intercepted by tack: {shadow.Advice}");
         return 0;
     }
 }

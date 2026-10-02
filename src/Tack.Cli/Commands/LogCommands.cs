@@ -5,7 +5,7 @@ using Spectre.Console.Cli;
 namespace Tack.Cli.Commands;
 
 // The invocation log: a setting compiled into resolved.json, so the shim pays nothing for it while it's off.
-// Toggling reshims to get the new setting in front of the shims.
+// Toggling recompiles resolved.json to get the new setting in front of the shims.
 
 // ---- log on --------------------------------------------------------------------------------------
 
@@ -26,7 +26,7 @@ public sealed class LogOnCommand : Command
         AnsiConsole.MarkupLine("[green]shim logging on.[/] Every shim call now records its caller chain, directory and target in:");
         AnsiConsole.MarkupLine($"  {Markup.Escape(env.ShimLog)}");
         AnsiConsole.MarkupLine("[grey]it adds a little to every tool call - [green]tack log off[/] when you're done; [green]tack log open[/] to find it.[/]");
-        Mutations.ReportReshim(env.Reshim(config));
+        Shims.Sync(env, config);
         return 0;
     }
 }
@@ -48,7 +48,7 @@ public sealed class LogOffCommand : Command
         config.Settings.Log = false;
         env.Save(config);
         AnsiConsole.MarkupLine("[green]shim logging off.[/] [grey]the log is kept:[/] " + Markup.Escape(env.ShimLog));
-        Mutations.ReportReshim(env.Reshim(config));
+        Shims.Sync(env, config);
         return 0;
     }
 }

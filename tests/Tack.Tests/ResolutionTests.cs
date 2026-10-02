@@ -39,14 +39,14 @@ public class ZoneRegistryTests
     public void Setting_the_same_directory_and_tool_replaces_rather_than_duplicates()
     {
         var c = new CentralConfig();
-        Assert.True(ZoneRegistry.Set(c, @"C:\work", "node", "18", enforce: false).Added);
+        Assert.True(ZoneRegistry.Set(c, @"C:\work", "node", "18", ignoreTackFiles: false).Added);
 
-        var r = ZoneRegistry.Set(c, "c:/WORK/", "node", "20", enforce: true); // same dir, different spelling
+        var r = ZoneRegistry.Set(c, "c:/WORK/", "node", "20", ignoreTackFiles: true); // same dir, different spelling
         Assert.False(r.Added);
         Assert.Equal("18", r.Previous!.Version);
         var z = Assert.Single(c.Zones);
         Assert.Equal("20", z.Version);
-        Assert.True(z.Enforce);
+        Assert.True(z.IgnoreTackFiles);
     }
 
     [Fact]
@@ -91,7 +91,7 @@ public class ZoneRegistryTests
             Bindings = new List<LegacyBinding>
             {
                 new() { Glob = "C:/work/**", Tools = { ["node"] = "18", ["python"] = "3.12" } },
-                new() { Glob = "C:/corp/**", Tools = { ["node"] = "18.19.0" }, Enforce = true },
+                new() { Glob = "C:/corp/**", Tools = { ["node"] = "18.19.0" } },
                 new() { Glob = "C:/work/*/api/**", Tools = { ["node"] = "20" } },
             },
         };
@@ -100,7 +100,7 @@ public class ZoneRegistryTests
 
         Assert.Equal(3, c.Zones.Count);
         Assert.Contains(c.Zones, z => z.Path == "C:/work" && z.Tool == "python");
-        Assert.Contains(c.Zones, z => z.Path == "C:/corp" && z.Enforce);
+        Assert.Contains(c.Zones, z => z.Path == "C:/corp" && z.Tool == "node");
         Assert.Equal(new[] { "C:/work/*/api/**" }, ZoneRegistry.Unmigrated(c));
 
         ZoneRegistry.Migrate(c); // idempotent
@@ -238,7 +238,7 @@ public class CompilerTests
             {
                 new Zone { Path = @"C:\work", Tool = "node", Version = "18" },
                 new Zone { Path = @"C:\work\modern", Tool = "node", Version = "20" },
-                new Zone { Path = @"C:\corp", Tool = "node", Version = "18.19.0", Enforce = true },
+                new Zone { Path = @"C:\corp", Tool = "node", Version = "18.19.0", IgnoreTackFiles = true },
             },
         };
     }
@@ -405,7 +405,7 @@ public class ResolverTests
         => Assert.Equal(ResolutionSource.Default, BuildResolver().Resolve("node", @"C:\workshop", Ctx()).Source);
 
     [Fact]
-    public void TackYml_beats_a_non_enforced_zone()
+    public void TackYml_beats_an_ordinary_zone()
     {
         var files = new Dictionary<string, string> { [@"C:\work\projA\tack.yml"] = "tools:\n  node: 20.11.0\n" };
         var r = BuildResolver().Resolve("node", @"C:\work\projA\src", Ctx(files: files));
@@ -414,11 +414,11 @@ public class ResolverTests
     }
 
     [Fact]
-    public void Enforced_zone_beats_tack_yml()
+    public void Zone_ignoring_tack_files_beats_tack_yml()
     {
         var files = new Dictionary<string, string> { [@"C:\corp\proj\tack.yml"] = "tools:\n  node: 20.11.0\n" };
         var r = BuildResolver().Resolve("node", @"C:\corp\proj", Ctx(files: files));
-        Assert.Equal(ResolutionSource.EnforcedZone, r.Source);
+        Assert.Equal(ResolutionSource.ZoneIgnoringTackFiles, r.Source);
         Assert.Equal("18.19.0", r.Version);
     }
 
@@ -437,14 +437,66 @@ public class ResolverTests
         Assert.Equal(ResolutionSource.VersionNotInstalled, r.Source);
     }
 
+    // A tack.yml comes with whatever repo you clone, so it may only choose between versions already registered in
+    // your own config. Whatever it says, the folder that runs comes from config.json.
+    [Theory]
+    [InlineData(@"C:\evil")]
+    [InlineData(@"C:\evil\node.exe")]
+    [InlineData(@"..\..\evil")]
+    [InlineData(@"\\attacker\share\node")]
+    [InlineData("%TEMP%")]
+    [InlineData("*")]
+    [InlineData("20.11.0/../../evil")]
+    [InlineData("20.11.0.")]   // a dotted prefix of nothing registered
+    public void Tack_yml_cannot_name_anything_but_a_registered_version(string value)
+    {
+        var files = new Dictionary<string, string> { [@"C:\repo\tack.yml"] = $"tools:\n  node: \"{value}\"\n" };
+        var r = BuildResolver().Resolve("node", @"C:\repo", Ctx(files: files));
+
+        Assert.Equal(ResolutionSource.VersionNotInstalled, r.Source);
+        Assert.Null(r.BinDir);
+        Assert.Null(r.Env);
+    }
+
+    [Fact]
+    public void Env_override_cannot_name_a_path_either()
+    {
+        var env = new Dictionary<string, string> { ["TACK_NODE_VERSION"] = @"C:\evil" };
+        var r = BuildResolver().Resolve("node", @"C:\x", Ctx(env: env));
+        Assert.Equal(ResolutionSource.VersionNotInstalled, r.Source);
+        Assert.Null(r.BinDir);
+    }
+
+    [Fact]
+    public void Tack_yml_only_ever_resolves_to_a_registered_bindir()
+    {
+        var registered = CompilerTests.Sample().Tools["node"].Versions.Values.Select(v => v.BinDir).ToHashSet();
+        foreach (var value in new[] { "18", "18.19.0", "20", "20.11.0" })
+        {
+            var files = new Dictionary<string, string> { [@"C:\repo\tack.yml"] = $"tools:\n  node: {value}\n" };
+            var r = BuildResolver().Resolve("node", @"C:\repo", Ctx(files: files));
+            Assert.Equal(ResolutionSource.TackYml, r.Source);
+            Assert.Contains(r.BinDir!, registered);
+        }
+    }
+
+    [Fact]
+    public void Tack_yml_entries_for_unregistered_tools_are_ignored()
+    {
+        // No way to invent a tool from a repo: `ruby` isn't registered, so there's nothing for it to pick.
+        var files = new Dictionary<string, string> { [@"C:\repo\tack.yml"] = "tools:\n  ruby: C:\\evil\n  node: 18\n" };
+        Assert.Equal(ResolutionSource.Unregistered, BuildResolver().Resolve("ruby", @"C:\repo", Ctx(files: files)).Source);
+        Assert.Equal("18.19.0", BuildResolver().Resolve("node", @"C:\repo", Ctx(files: files)).Version);
+    }
+
     // Sample() plus: C:\work\legacy switches node off, C:\work\legacy\revived switches it back on, and C:\corp\free
-    // is an enforced none zone inside the enforced C:\corp one.
+    // is a none zone that ignores tack files, inside the C:\corp one that does too.
     private static Resolver NoneResolver()
     {
         var c = CompilerTests.Sample();
         c.Zones.Add(new Zone { Path = @"C:\work\legacy", Tool = "node", Version = "none" });
         c.Zones.Add(new Zone { Path = @"C:\work\legacy\revived", Tool = "node", Version = "20" });
-        c.Zones.Add(new Zone { Path = @"C:\corp\free", Tool = "node", Version = "None", Enforce = true });
+        c.Zones.Add(new Zone { Path = @"C:\corp\free", Tool = "node", Version = "None", IgnoreTackFiles = true });
         return new Resolver(ConfigCompiler.Compile(c));
     }
 
@@ -468,7 +520,7 @@ public class ResolverTests
     }
 
     [Fact]
-    public void TackYml_beats_a_non_enforced_none_zone()
+    public void TackYml_beats_an_ordinary_none_zone()
     {
         var files = new Dictionary<string, string> { [@"C:\work\legacy\app\tack.yml"] = "tools:\n  node: 18\n" };
         var r = NoneResolver().Resolve("node", @"C:\work\legacy\app", Ctx(files: files));
@@ -476,12 +528,12 @@ public class ResolverTests
     }
 
     [Fact]
-    public void Enforced_none_zone_beats_tack_yml_and_the_enforced_zone_above_it()
+    public void None_zone_ignoring_tack_files_beats_tack_yml_and_the_zone_above_it()
     {
         var files = new Dictionary<string, string> { [@"C:\corp\free\x\tack.yml"] = "tools:\n  node: 20\n" };
         var r = NoneResolver().Resolve("node", @"C:\corp\free\x", Ctx(files: files));
         Assert.Equal(ResolutionSource.ZoneNone, r.Source);
-        Assert.StartsWith(@"enforced zone C:\corp\free", r.Detail);
+        Assert.StartsWith(@"zone C:\corp\free (ignores tack files)", r.Detail);
     }
 
     [Fact]
@@ -541,7 +593,7 @@ public class ResolverTests
     }
 
     [Fact]
-    public void TackYml_beats_a_non_enforced_all_tools_zone()
+    public void TackYml_beats_an_ordinary_all_tools_zone()
     {
         var files = new Dictionary<string, string> { [@"C:\work\legacy\x\tack.yml"] = "tools:\n  python: 3.12\n" };
         var r = AllToolsResolver().Resolve("python", @"C:\work\legacy\x", Ctx(files: files));

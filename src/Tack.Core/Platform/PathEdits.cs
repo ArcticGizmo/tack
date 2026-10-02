@@ -5,7 +5,7 @@ namespace Tack.Core.Platform;
 public sealed record PathChange(string Scope, string Before, string After);
 
 /// <summary>
-/// Pure PATH-string edits for <c>tack doctor --fix</c>, working on <b>raw</b> entries so environment tokens are
+/// Pure PATH-string edits for wiring tack onto the user PATH, working on <b>raw</b> entries so environment tokens are
 /// preserved: <c>%SystemRoot%\system32</c> stays a token, only the shims dir is moved to the front. Comparisons
 /// expand entries (via the injected <paramref name="expand"/>) so a token and its expansion count as the same
 /// directory, but the strings returned keep every untouched entry exactly as it was stored. No registry or
@@ -41,18 +41,22 @@ public static class PathEdits
     }
 
     /// <summary>
-    /// The raw PATH with tack wired in: <paramref name="shimsDir"/> at the very front (it must win over every
-    /// other tool install) and <paramref name="installDir"/> appended if it's missing (it only needs to resolve).
-    /// Null when both are already in place and nothing needs writing.
+    /// The raw PATH with tack wired in: <paramref name="shimsDir"/> at the front as <see cref="PromoteFront"/> places
+    /// it (it must win over every other tool install on this PATH), and <paramref name="installDir"/>, if given,
+    /// appended when it's missing (it only needs to resolve). Null when both are already in place.
     /// </summary>
-    public static string? Register(string? rawPath, string shimsDir, string installDir, Func<string, string>? expand = null)
+    public static string? Register(string? rawPath, string shimsDir, string? installDir,
+        IEnumerable<string>? behind = null, Func<string, string>? expand = null)
     {
         expand ??= Environment.ExpandEnvironmentVariables;
-        string current = PromoteFront(rawPath, shimsDir, behind: null, expand) ?? string.Join(';', Split(rawPath));
+        string current = PromoteFront(rawPath, shimsDir, behind, expand) ?? string.Join(';', Split(rawPath));
         var entries = Split(current);
-        string install = Key(installDir, expand);
-        if (!entries.Any(p => Key(p, expand) == install))
-            entries.Add(Trim(installDir));
+        if (installDir is not null)
+        {
+            string install = Key(installDir, expand);
+            if (!entries.Any(p => Key(p, expand) == install))
+                entries.Add(Trim(installDir));
+        }
 
         return SameByKey(Split(rawPath), entries, expand) ? null : string.Join(';', entries);
     }

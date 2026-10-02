@@ -1,3 +1,4 @@
+using Spectre.Console;
 using Tack.Core.Resolution;
 
 namespace Tack.Cli.Commands;
@@ -17,7 +18,7 @@ internal static class Render
     public static string SourceMarkup(ResolutionSource s) => s switch
     {
         ResolutionSource.EnvOverride => "[aqua]env[/]",
-        ResolutionSource.EnforcedZone => "[red]enforced zone[/]",
+        ResolutionSource.ZoneIgnoringTackFiles => "[red]zone (ignores tack files)[/]",
         ResolutionSource.TackYml => "[green]tack.yml[/]",
         ResolutionSource.Zone => "[blue]zone[/]",
         ResolutionSource.Default => "[grey]default[/]",
@@ -35,6 +36,13 @@ internal static class Render
             : env.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
                  .Select(kv => kv.Value.Length == 0 ? $"{kv.Key} (unset)" : $"{kv.Key}={kv.Value}")
                  .ToList();
+
+    /// <summary>Say which commands won't reach tack's shims, and what to do about each (nulls are skipped).</summary>
+    public static void Shadows(IEnumerable<Shadow?> shadows)
+    {
+        foreach (var s in shadows.OfType<Shadow>())
+            AnsiConsole.MarkupLine($"[yellow]'{Markup.Escape(s.Name)}' isn't intercepted:[/] [grey]{Markup.Escape(s.Advice)}[/]");
+    }
 
     public static bool OnPath(string dir)
     {

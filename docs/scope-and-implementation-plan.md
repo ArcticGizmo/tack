@@ -130,7 +130,7 @@ Project files: `tack.yml` committed (or not) in a project tree, discovered by wa
   - **registry** — `tool@version → { binDir, exposes: [names] }`: where each *installed* version lives
     and which executables it provides. This is the "shim things tack didn't install" surface: you
     register an existing install here.
-  - **zones** — `{ path, tool, version, enforce }`: the **centrally-managed** rules that apply without a
+  - **zones** — `{ path, tool, version, ignoreTackFiles }`: the **centrally-managed** rules that apply without a
     `tack.yml` in the repo. A zone is a plain absolute directory covering itself and everything under it,
     keyed by (path, tool) so two zones can never disagree about the same tool in the same place. (Zones
     replaced the original glob "bindings"; see 4.)
@@ -177,8 +177,8 @@ with a mid-path wildcard is left in place, ignored, and flagged by `tack doctor`
 
 **Precedence decision to confirm (see Open decisions):** default is `tack.yml` **beats** a central
 zone — a committed project file is a stronger statement of intent than a machine-wide rule. An org
-that wants to *enforce* a version regardless can mark a zone `enforce: true` to lift it above
-`tack.yml`. v1 ships the `tack.yml`-wins default; `enforce` is a small later addition.
+that wants a version to win regardless can add a zone with `--ignore-tack-files` to lift it above
+`tack.yml`. v1 ships the `tack.yml`-wins default; `--ignore-tack-files` is a small later addition.
 
 **No-resolution behaviour** is configurable, default = **passthrough**. Rationale: it matches the whole
 philosophy ("you don't need tack.yml everywhere") — tack only *acts* where a rule exists, and elsewhere
@@ -344,7 +344,7 @@ Console app, assembly name `tack`. Spectre.Console for tables, trees, prompts, s
 | `tack shims` | List generated shims + target dir; PATH-ordering health line. |
 | `tack use <tool>@<ver>` | Write/update `tack.yml` in the current dir. Interactive (Spectre `SelectionPrompt`) when the version is omitted — pick from registered versions. |
 | `tack register <tool>@<ver> --path <binDir> [--exposes a,b,c]` | Add an existing install to the central registry (the "dispatch to something tack didn't install" case). |
-| `tack zones add <dir> <tool>@<ver> [--enforce]` / `zones remove [dir] [tool]` / `zones list` | Manage central zones (managed without a repo `tack.yml`). `add` upserts by (dir, tool); `remove` with no args is an interactive picker. Replaced the original `tack bind <dirGlob>`. |
+| `tack zones add <dir> <tool>@<ver> [--ignore-tack-files]` / `zones remove [dir] [tool]` / `zones list` | Manage central zones (managed without a repo `tack.yml`). `add` upserts by (dir, tool); `remove` with no args is an interactive picker. Replaced the original `tack bind <dirGlob>`. |
 | `tack reshim` | Regenerate shims + `resolved.json`. Spectre status spinner. |
 | `tack doctor` | Diagnose: shims dir on PATH? ahead of shadowers (nvm-windows…)? stale shims? missing binDirs? Renders as a checklist. |
 | `tack open` / `tack ui` | Launch `tack-ui.exe`. |
@@ -436,7 +436,7 @@ Ordered so there's a usable thing early and the risky part (the shim) is proven 
   suite, first-run PATH/shim wiring on install.
 - **Since.** Glob bindings (M2–M4) were replaced by plain-directory zones: `tack bind` → `tack zones`,
   and the UI's Bindings editor → Zones (see 3.3 and 4).
-- **Later.** `enforce` zones; shell-activation convenience; macOS/Linux heads; version *installation*
+- **Later.** Zones that ignore tack files; shell-activation convenience; macOS/Linux heads; version *installation*
   backends; central-config sync; **dependent / global bins (5.5) and stamp-based auto-reshim (5.6)**;
   signing + WinGet.
 
@@ -461,7 +461,7 @@ Ordered so there's a usable thing early and the risky part (the shim) is proven 
 
 ## 11. Open decisions (confirm before/while building)
 
-1. **`tack.yml` vs central zone precedence.** Recommended default: `tack.yml` wins; `enforce: true`
+1. **`tack.yml` vs central zone precedence.** Recommended default: `tack.yml` wins; `--ignore-tack-files`
    lifts a central zone above it. Confirm this matches how you want org-managed dirs to behave.
 2. **No-resolution behaviour.** Recommended default: passthrough to next-on-PATH (tack invisible where
    unconfigured). Alternative: error. Per-tool or global setting?

@@ -20,10 +20,10 @@ public static class ZoneRegistry
 
     /// <summary>Add or replace the zone for (<paramref name="path"/>, <paramref name="tool"/>). The path is
     /// stored as given, minus any trailing separator; the caller makes it absolute.</summary>
-    public static ZoneSetResult Set(CentralConfig config, string path, string tool, string version, bool enforce)
+    public static ZoneSetResult Set(CentralConfig config, string path, string tool, string version, bool ignoreTackFiles)
     {
         string trimmed = TrimSeparators(path);
-        var zone = new Zone { Path = trimmed, Tool = tool, Version = version, Enforce = enforce };
+        var zone = new Zone { Path = trimmed, Tool = tool, Version = version, IgnoreTackFiles = ignoreTackFiles };
 
         int i = config.Zones.FindIndex(z => Same(z, trimmed, tool));
         if (i < 0)
@@ -70,7 +70,7 @@ public static class ZoneRegistry
                 continue;
             }
             foreach (var (tool, version) in b.Tools)
-                Set(config, path, tool, version, b.Enforce);
+                Set(config, path, tool, version, ignoreTackFiles: false);
         }
 
         config.Bindings = kept.Count > 0 ? kept : null;

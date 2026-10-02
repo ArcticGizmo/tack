@@ -1,60 +1,65 @@
 namespace Tack.Core;
 
 /// <summary>
-/// The well-known per-user paths tack uses. Mirrors the on-disk layout in the scope plan (section 3.2):
-/// everything lives under %LOCALAPPDATA%\tack (or %LOCALAPPDATA%\tack (Dev) for a dev build - see
-/// <see cref="TackProfile"/>). The Velopack install dir (current\) is separate and found via
-/// AppContext.BaseDirectory at runtime.
+/// The well-known paths tack uses (see docs/user-path-plan.md, "Target layout"). Everything is this account's own,
+/// under %LOCALAPPDATA%, and comes in a release and a dev flavour (see <see cref="TackProfile"/>). The release data
+/// folder (<c>tack</c>) is also Velopack's install root (<c>Tack</c>; NTFS doesn't mind the case), which is why the
+/// shims sit beside <c>current\</c> rather than in it: updates replace <c>current\</c> but keep the rest.
 /// </summary>
 public static class TackPaths
 {
-    /// <summary>%LOCALAPPDATA%\tack (or \tack (Dev) under a dev profile).</summary>
-    public static string Root => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), TackProfile.DataFolderName);
-
-    /// <summary>The directory of shim exes that goes on PATH (one *.exe per exposed tool binary).</summary>
-    public static string ShimsDir => Path.Combine(Root, "shims");
-
-    /// <summary>Where the shims dir is parked while tack is disabled (<c>tack disable</c>). The PATH entry
-    /// still points at <see cref="ShimsDir"/>, so with the folder renamed away nothing resolves and tack
-    /// stops intercepting - but config/reshim keep writing here, so <c>tack enable</c> brings it back live.</summary>
-    public static string DisabledShimsDir => Path.Combine(Root, "shims_disabled");
-
-    /// <summary>The RELEASE profile's shims dirs (live + parked), whatever profile this process runs as. A dev
-    /// instance places itself directly behind these on the machine PATH.</summary>
-    public static IReadOnlyList<string> ReleaseShimsDirs
+    public static class User
     {
-        get
+        public static string Root => DataRoot(TackProfile.DataFolderName);
+
+        /// <summary>Central, tool-managed config: registry + zones + defaults + settings (JSON).</summary>
+        public static string ConfigJson => Path.Combine(Root, "config.json");
+
+        /// <summary>Compiled fast-lookup the shim reads (regenerated on config change).</summary>
+        public static string ResolvedJson => Path.Combine(Root, "resolved.json");
+
+        /// <summary>The shim invocation log (<c>tack log on</c>), written beside resolved.json.</summary>
+        public static string ShimLog => Diagnostics.ShimLog.PathFor(ResolvedJson);
+
+        /// <summary>The shims that go first on the user PATH (one *.exe per exposed tool binary).</summary>
+        public static string ShimsDir => Path.Combine(Root, "shims");
+
+        /// <summary>Before/after records of every user PATH edit.</summary>
+        public static string PathBackupsDir => Path.Combine(Root, "path-backups");
+
+        /// <summary>The release profile's shims, whatever profile this process runs as. A dev instance places
+        /// itself directly behind them on the user PATH.</summary>
+        public static string ReleaseShimsDir => Path.Combine(DataRoot(TackProfile.ReleaseDataFolder), "shims");
+
+        /// <summary>Both profiles' shims. Anything that hunts PATH for a "real" tool (e.g. <c>tool add</c>
+        /// discovery) must skip the other profile's shims too, not just its own.</summary>
+        public static IReadOnlyList<string> AllShimsDirs => new[]
         {
-            string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "tack");
-            return new[] { Path.Combine(root, "shims"), Path.Combine(root, "shims_disabled") };
-        }
+            ReleaseShimsDir,
+            Path.Combine(DataRoot(TackProfile.DevDataFolder), "shims"),
+        };
+
+        internal static string DataRoot(string folder) =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), folder);
     }
 
-    /// <summary>Every tack shims dir on this machine - live and parked, for BOTH profiles. A dev instance sits on
-    /// PATH behind the release one, so anything that hunts PATH for a "real" tool (e.g. <c>tool add</c>
-    /// discovery) must skip the other profile's shims too, not just its own.</summary>
-    public static IReadOnlyList<string> AllShimsDirs
+    /// <summary>
+    /// Every folder any tack build has put on a PATH: both profiles' shims, the release install's <c>current\</c>,
+    /// and the Program Files folders from the per-machine experiment (M9). None of them belongs on the system PATH,
+    /// and tack never writes it, so <c>doctor</c> reports any it finds there for you to remove (ADR 0002).
+    /// </summary>
+    public static IReadOnlyList<string> EverWired
     {
         get
         {
-            string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            var dirs = new List<string>();
-            foreach (var folder in new[] { "tack", "tack (Dev)" })
+            string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            return User.AllShimsDirs.Concat(new[]
             {
-                dirs.Add(Path.Combine(local, folder, "shims"));
-                dirs.Add(Path.Combine(local, folder, "shims_disabled"));
-            }
-            return dirs;
+                Path.Combine(User.DataRoot(TackProfile.ReleaseDataFolder), "current"),
+                Path.Combine(programFiles, "Tack", "shims"),
+                Path.Combine(programFiles, "Tack", "current"),
+                Path.Combine(programFiles, "Tack (Dev)", "shims"),
+            }).ToList();
         }
     }
-
-    /// <summary>Central, tool-managed config: registry + zones + defaults (JSON).</summary>
-    public static string ConfigJson => Path.Combine(Root, "config.json");
-
-    /// <summary>Compiled fast-lookup the shim reads (regenerated on config change).</summary>
-    public static string ResolvedJson => Path.Combine(Root, "resolved.json");
-
-    /// <summary>The shim invocation log (<c>tack log on</c>), written beside resolved.json.</summary>
-    public static string ShimLog => Diagnostics.ShimLog.PathFor(ResolvedJson);
 }

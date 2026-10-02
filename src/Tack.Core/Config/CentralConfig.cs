@@ -59,8 +59,8 @@ public sealed class Zone
     /// <summary>A version (or prefix), or <see cref="ZoneVersion.None"/> to turn tack off for the tool here.</summary>
     public string Version { get; set; } = "";
 
-    /// <summary>When true, this zone beats a repo tack.yml (org enforcement). Default false.</summary>
-    public bool Enforce { get; set; }
+    /// <summary>When true, this zone beats a repo tack.yml. Default false.</summary>
+    public bool IgnoreTackFiles { get; set; }
 }
 
 /// <summary>
@@ -93,7 +93,6 @@ public sealed class LegacyBinding
 {
     public string Glob { get; set; } = "";
     public Dictionary<string, string> Tools { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-    public bool Enforce { get; set; }
 }
 
 public sealed class TackSettings
@@ -105,4 +104,10 @@ public sealed class TackSettings
     /// (<c>tack log on</c>; see <see cref="Tack.Core.Diagnostics.ShimLog"/>). Left out of the JSON when false.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool Log { get; set; }
+
+    /// <summary>When true, tack is off for this account (<c>tack disable</c>): every shim passes straight through
+    /// to the next match on PATH, as if there were no config. The shims stay on the user PATH, so <c>tack enable</c>
+    /// is instant. Left out of the JSON when false.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Disabled { get; set; }
 }

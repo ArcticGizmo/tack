@@ -4,6 +4,7 @@ using System.Text.Json;
 using Tack.Core;
 using Tack.Core.Config;
 using Tack.Core.Diagnostics;
+using Tack.Core.Platform;
 using Tack.Core.Resolution;
 
 // tack-shim
@@ -16,7 +17,8 @@ using Tack.Core.Resolution;
 // made it - to the invocation log.
 //
 // All resolution logic lives in Tack.Core (the resolver, zone paths, version match, mini tack.yml parser). The
-// shim is a thin front-end: filename -> Resolver -> locate -> exec. It reads only the compiled resolved.json.
+// shim is a thin front-end: filename -> Resolver -> locate -> exec. It reads only the calling account's compiled
+// resolved.json, and an account without one (SYSTEM, a service, another user) just gets passthrough.
 
 try
 {
@@ -25,10 +27,11 @@ try
     string exposed = Path.GetFileNameWithoutExtension(self);
     Debug($"exposed='{exposed}' self='{self}'");
 
-    // 2. Load the pre-compiled resolved.json (source-gen, AOT-safe).
+    // 2. Load this account's pre-compiled resolved.json (source-gen, AOT-safe). No config at all means tack isn't
+    //    set up for this account, so it stays invisible: straight passthrough, no logging, no settings.
     string? resolvedPath = FindResolved();
     if (resolvedPath is null)
-        return Fail("no resolved.json found (set TACK_RESOLVED, or place it beside the shim / in %LOCALAPPDATA%\\tack)");
+        return StraightThrough(exposed, args, "tack isn't set up for this account");
 
     ResolvedConfig? config;
     try
@@ -43,6 +46,10 @@ try
     }
     if (config is null) return Fail($"empty or invalid config: {resolvedPath}");
 
+    // `tack disable`: off for this account, exactly as if it had no config.
+    if (config.Settings.Disabled)
+        return StraightThrough(exposed, args, "tack is disabled");
+
     // 3. Resolve which version this binary is for THIS directory (Core owns the precedence).
     var resolver = new Resolver(config);
     var ctx = new ResolverContext
@@ -53,14 +60,20 @@ try
     var res = resolver.Resolve(exposed, Environment.CurrentDirectory, ctx);
     Debug($"source={res.Source} tool={res.Tool} version={res.Version} binDir={res.BinDir} :: {res.Detail}");
 
-    // 4. Decide what to run (or why not), record it if `tack log on`, then act.
+    // 4. Decide what to run (or why not) and how, record it if `tack log on`, then act.
     var (target, error) = Decide(exposed, res, config);
+    ProcessStartInfo? psi = null;
+    if (target is not null)
+    {
+        (psi, error) = StartInfo(target, args, res.Env);
+        if (psi is null) target = null;
+    }
     if (config.Settings.Log) LogInvocation(ShimLog.PathFor(resolvedPath), exposed, args, res, target, error);
 
     // Install the Ctrl-C handler once, before any child is spawned.
     Native.IgnoreConsoleInterrupts();
 
-    return target is null ? Fail(error!) : Exec(target, args, res.Env);
+    return psi is null ? Fail(error!) : Exec(psi);
 }
 catch (Exception ex)
 {
@@ -119,6 +132,20 @@ static (string? Target, string? Error) Passthrough(string exposed)
     return (null, $"'{exposed}' did not resolve for this directory and no fallback was found on PATH");
 }
 
+// tack is off for this caller (no config, or disabled): run the next match on PATH without resolving, logging or
+// consulting any setting. `why` only shows up if there's nothing on PATH to run.
+static int StraightThrough(string exposed, string[] forwarded, string why)
+{
+    Debug($"{why} -> passthrough");
+    var (fallback, _) = Passthrough(exposed);
+    if (fallback is null)
+        return Fail($"'{exposed}' was not found on PATH ({why}, so it passes calls through)");
+    var (psi, error) = StartInfo(fallback, forwarded, env: null);
+    if (psi is null) return Fail(error!);
+    Native.IgnoreConsoleInterrupts();
+    return Exec(psi);
+}
+
 // ---- invocation log -----------------------------------------------------------------------------
 
 // Best effort by design: a debug log must never be the reason a tool call fails.
@@ -156,32 +183,44 @@ static void LogInvocation(string logPath, string exposed, string[] forwarded, Re
 
 // ---- exec proxy ---------------------------------------------------------------------------------
 
-// Spawn the target as a child, inheriting our console + std handles, and return ITS exit code. A .cmd/.bat
-// is not a PE image, so CreateProcess (UseShellExecute=false) rejects it; those go through cmd.exe /c. The
+// How to start the target, or why it can't be. A .cmd/.bat is not a PE image, so CreateProcess
+// (UseShellExecute=false) rejects it; those go through cmd.exe with every argument escaped for cmd (see
+// BatchCommandLine - plain exe quoting lets an argument inject commands), and an argument that can't be escaped
+// fails the call rather than being passed on. cmd.exe is System32's own, never %ComSpec% or a PATH search. The
 // resolved version's own variables (if any) are layered over our environment, %VARS% expanded against it.
-static int Exec(string target, string[] forwarded, IReadOnlyDictionary<string, string>? env)
+static (ProcessStartInfo? Psi, string? Error) StartInfo(string target, string[] forwarded,
+    IReadOnlyDictionary<string, string>? env)
 {
     string ext = Path.GetExtension(target);
     bool viaCmd = ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase)
                || ext.Equals(".bat", StringComparison.OrdinalIgnoreCase);
 
-    var psi = new ProcessStartInfo
-    {
-        FileName = viaCmd ? Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe" : target,
-        UseShellExecute = false,   // inherit handles, no shell, no new window
-    };
+    var psi = new ProcessStartInfo { UseShellExecute = false }; // inherit handles, no shell, no new window
     if (viaCmd)
     {
-        psi.ArgumentList.Add("/c");
-        psi.ArgumentList.Add(target);
+        string? cmdArgs = BatchCommandLine.Build(target, forwarded, out var error);
+        if (cmdArgs is null) return (null, $"{Path.GetFileName(target)}: {error}");
+        psi.FileName = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+        psi.Arguments = cmdArgs;
+        Debug($"cmd: {cmdArgs}");
     }
-    foreach (var a in forwarded) psi.ArgumentList.Add(a);
+    else
+    {
+        psi.FileName = target;
+        foreach (var a in forwarded) psi.ArgumentList.Add(a);
+    }
+
     if (env is { Count: > 0 })
     {
         Debug($"env: {string.Join(", ", env.Keys)}");
         VersionEnv.ApplyTo(psi.Environment, env, Environment.ExpandEnvironmentVariables);
     }
+    return (psi, null);
+}
 
+// Spawn the target as a child, inheriting our console + std handles, and return ITS exit code.
+static int Exec(ProcessStartInfo psi)
+{
     using var child = Process.Start(psi);
     if (child is null) return Fail("failed to start target process");
     child.WaitForExit();
@@ -190,24 +229,23 @@ static int Exec(string target, string[] forwarded, IReadOnlyDictionary<string, s
 
 // ---- config discovery ---------------------------------------------------------------------------
 
+// Only ever the calling account's own config. TACK_RESOLVED wins when set (the test hook: anything that can set our
+// environment can already set PATH), and a missing file there means no config rather than a fallback. Otherwise it's
+// resolved.json in the token user's own %LOCALAPPDATA%, for the profile named by the shims folder's parent (see
+// TackProfile.ForShimsDir). Never a file beside the shim or above the shims folder: every account runs these shims,
+// so a config found there would belong to someone else. Null means this account has no config.
 static string? FindResolved()
 {
-    if (Environment.GetEnvironmentVariable("TACK_RESOLVED") is { Length: > 0 } env && File.Exists(env))
-        return env;
+    if (Environment.GetEnvironmentVariable("TACK_RESOLVED") is { Length: > 0 } env)
+        return File.Exists(env) ? env : null;
 
-    string beside = Path.Combine(AppContext.BaseDirectory, "resolved.json");
-    if (File.Exists(beside)) return beside;
+    // The known-folder API reads the process token's profile, not the %LOCALAPPDATA% variable. An account with no
+    // profile gets "", and that must never turn into a path relative to the working directory.
+    string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    if (!Path.IsPathFullyQualified(local)) return null;
 
-    // The data dir the shim was stamped into: <root>\shims\node.exe -> <root>\resolved.json. This ties a shim to
-    // ITS profile (tack vs tack (Dev)) by where it lives, not by how it was compiled - so a dev instance's shims
-    // read the dev config even when the shim binary itself is a Release build.
-    if (Directory.GetParent(AppContext.BaseDirectory.TrimEnd('\\', '/')) is { } root)
-    {
-        string owner = Path.Combine(root.FullName, "resolved.json");
-        if (File.Exists(owner)) return owner;
-    }
-
-    return File.Exists(TackPaths.ResolvedJson) ? TackPaths.ResolvedJson : null;
+    string path = Path.Combine(local, TackProfile.ForShimsDir(AppContext.BaseDirectory), "resolved.json");
+    return File.Exists(path) ? path : null;
 }
 
 // ---- misc ---------------------------------------------------------------------------------------

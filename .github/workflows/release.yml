@@ -23,8 +23,9 @@ jobs:
         with:
           dotnet-version: '10.x'
 
+      # Pinned to the Velopack library version in Tack.Cli.csproj; bump the two together.
       - name: Install vpk CLI
-        run: dotnet tool install -g vpk
+        run: dotnet tool install -g vpk --version 1.2.158
 
       - name: Get version from tag
         id: version
