@@ -69,4 +69,5 @@ public sealed class ResolvedZone
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(ResolvedConfig))]
 [JsonSerializable(typeof(CentralConfig))]
+[JsonSerializable(typeof(Tack.Core.Installs.InstallMarker))]
 public partial class TackJson : System.Text.Json.Serialization.JsonSerializerContext { }

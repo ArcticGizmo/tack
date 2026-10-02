@@ -137,7 +137,21 @@ Done: `src/Tack.Core/Installs/` (`IToolSource`, `NodeSource`, `PythonSource`, `T
 **Done when:** every resolution rule has a fixture test, including the errors (unknown version, `python@lts`, no
 build for this architecture, only a pre-release matches).
 
-### Checkpoint 3: the install engine
+### Checkpoint 3: the install engine ✅ 2026-10-02
+
+Done: `Installer`, `HttpDownloader`, `ProcessRunner` and `IndexCache` in `src/Tack.Core/Installs/`, tested in
+`InstallerTests`. Where it differs from the plan:
+
+- **A lock file, not a mutex,** serialises installs and removals (`installs\.lock`, deleted on close). A mutex
+  belongs to a thread, and an install awaits across several.
+- **Archives are size-checked before unpacking:** at most 200,000 entries and 4 GB unpacked.
+- **Ownership (I7) is stricter than "has a marker":** the folder must be exactly `<tool>\<version>` under
+  `installs\` (not a dot-folder), not a junction or symlink, and its marker must name that same tool and version.
+- **Redirects are followed by hand,** at most 5, each one checked to be HTTPS.
+- **The cache stores each index page** (`.cache\<tool>-<url hash>.json`), so Python's three pages age
+  independently. Offline, an older copy is used and its age is reported.
+- **Confirmed on this machine:** an open handle on a file inside a version's folder stops the rename to `.trash`,
+  so an in-use version fails cleanly.
 
 - `IDownloader` with an `HttpClient` implementation (HTTPS only, progress callbacks, cancellable) and a fake one
   for tests.
