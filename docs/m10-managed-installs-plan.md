@@ -1,0 +1,202 @@
+# Plan: managed installs (M10)
+
+*Drafted 2026-10-02 on `feature/managed-installs`.*
+
+tack has always said "you install the versions, tack does the dispatch" ([scope plan §2](scope-and-implementation-plan.md#non-goals-v1--deliberately-deferred):
+*"No downloading Node/Python. tack registers existing installs."*). That plan already left room for this as a
+separable "backends" feature, and this is that feature. nvm-windows and fnm are the friction this removes: tack
+already does their dispatch better, so the only reason left to keep them is that they fetch versions.
+
+**Opt-in and additive.** `tack tool add` is unchanged and still takes an install from anywhere. `tack tool install`
+is a convenience on top: download, check, unpack into tack's own folder, then register it exactly as `tool add`
+would. Nothing ever downloads unless you run an install or availability command.
+
+First cut: **Node and Python**, Windows on the host's native architecture. tack is still greenfield, so breaking
+changes are fine.
+
+## What it looks like
+
+```powershell
+tack tool available node            # newest of each major, LTS marked
+tack tool available python 3.12     # every 3.12.x
+tack tool install node@20           # newest 20.x -> registers node@20.11.1
+tack tool install node@lts          # newest LTS
+tack tool install python@latest     # newest stable
+tack tool list                      # managed versions are marked
+tack tool remove node@20.11.1       # unregisters it and deletes its files (--keep-files to keep them)
+```
+
+## Target layout
+
+| What | Where |
+|---|---|
+| one managed version | `%LOCALAPPDATA%\tack\installs\<tool>\<version>\` (for example `installs\node\20.11.1\node.exe`) |
+| in-progress downloads | `%LOCALAPPDATA%\tack\installs\.staging\<random>\` |
+| removed, awaiting delete | `%LOCALAPPDATA%\tack\installs\.trash\<random>\` |
+| cached version indexes | `%LOCALAPPDATA%\tack\installs\.cache\<tool>-index.json` |
+| dev profile | the same, under `%LOCALAPPDATA%\tack (Dev)\installs\` |
+
+**LocalAppData, not Roaming.** These folders are hundreds of MB, specific to the machine's architecture, and must
+never sync with a roaming profile. Velopack updates only replace `current\`, so installs survive updates.
+Uninstalling tack keeps them along with the rest of tack's data, as it does today.
+
+## Decisions taken (overrule any)
+
+| # | Decision | Instead of |
+|---|---|---|
+| I1 | **The shim never touches the network, and a `tack.yml` never causes a download.** Installing is always an explicit command you type. | auto-installing a missing pinned version on first call |
+| I2 | **Register the exact version.** `node@20` and `node@lts` are resolved when you install; the registry gets `node@20.11.1`. Pins keep matching by dotted prefix, so `node: 20` in a `tack.yml` still picks it. | registering under the spec you typed |
+| I3 | **Fail closed on integrity.** HTTPS only (and no redirect down to HTTP). The archive's SHA-256 must match the vendor's published value (Node's `SHASUMS256.txt`, python.org's index), otherwise the download is deleted and nothing is registered. Checking signatures (Node's GPG, Python's Sigstore) comes later. As with `install.ps1`, a hash from the same host proves the bytes weren't damaged on the way, not who made them. | trusting TLS alone |
+| I4 | **The source declares what a version exposes,** filtered to the files that actually exist. A folder scan would pick up Node's `install_tools.bat` and `nodevars.bat`. Node: `node npm npx corepack` (corepack is gone from Node 25 onwards, so it's dropped there). Python: `python pythonw` plus `pip pip3` from `Scripts\`. | `ToolProbe.DetectExposes` |
+| I5 | **A version can have extra bin folders.** `InstalledVersion.ExtraBinDirs` (null when empty, so plain versions never write the key) are searched after `BinDir`, by the shim and by `which`. That's how Python's `Scripts\pip.exe` is reached. | renaming `BinDir` to a list everywhere |
+| I6 | **Native architecture only.** x64 Windows gets x64 builds, arm64 gets arm64. If the vendor has no build for this architecture, the install fails and says so; there's no quiet fallback to emulated x64. | falling back to x64 on arm64 |
+| I7 | **tack only deletes what it installed.** A managed version carries an `Install` receipt in config (source, URL, SHA-256, date) **and** a `.tack-install.json` file in its folder. tack deletes a folder only if it is strictly inside the installs root and has that file. Everything registered with `tool add` is never deleted. | trusting the config flag alone |
+| I8 | **Installing a version name that's already registered from elsewhere is refused.** If `node@20.11.1` already points at `C:\node\20.11.1`, `tool install node@20.11.1` says so and stops. Remove it first. Installing a version that's already managed is a no-op that says so. | silently replacing it |
+| I9 | **Removing a managed version deletes its files by default** (`--keep-files` keeps them). The folder is first renamed into `.trash\`. Windows refuses the rename while something is running from it, so a version that's in use fails cleanly before the config changes, with "close whatever is running node 20.11.1". After the rename, tack unregisters it and deletes the trash; anything it can't delete yet is retried on the next install or `doctor --fix`. | deleting in place and leaving half a folder |
+| I10 | **Installs are atomic.** Download and unpack into `.staging\`, check the result, then rename it into place (on the same volume, so the rename is atomic) and register it. An interrupted install never leaves a registered half-install. Stale staging folders are swept on the next install. One mutex per profile serialises installs. | unpacking in place |
+| I11 | **Unpacking is checked.** Every zip entry must land inside the staging folder (no zip slip), and the source names the single top-level folder to strip (`node-v20.11.1-win-x64\`) rather than tack guessing. | `ZipFile.ExtractToDirectory` as-is |
+| I12 | **Python is the python.org build** from the zip packages its Windows install manager uses, with the NuGet package as the fallback if checkpoint 0 finds a gap. Never the embeddable zip: its `._pth` file switches off `site` and it has no pip. No `py` launcher, no `python3` alias, and no PEP 514 registry entries. tack still writes nothing but its own user PATH entries. | python-build-standalone |
+| I13 | **Pre-releases only when named exactly.** `python@latest` and `python@3.14` skip `3.14.0rc1`; `python@3.14.0rc1` installs it. Free-threaded builds (`3.13t`) are out of the first cut. Python has no LTS, so `python@lts` is an error that says to use `latest` or a version. | including pre-releases |
+| I14 | **Versions are ordered numerically, not as strings.** One shared `VersionOrder` in Core does "newest" for aliases, `available` and the default repointing in `ToolRegistry.Remove`, which today orders by string and so picks `9.0` over `10.0`. | string order |
+| I15 | **Network calls use the system proxy** (`HttpClient`'s default on Windows). No mirror setting in the first cut. | a `TACK_NODE_MIRROR`-style setting now |
+| I16 | **The first version installed becomes the default,** the same rule as `tool add`. Both paths go through one Core registration function, so they can't drift. | separate rules for install |
+
+## Checkpoints
+
+Each checkpoint is one commit (or a small run of them) that builds, passes the tests and can be reviewed alone,
+and ends with an explicit **Done when**. Unit tests never use the network: sources parse recorded fixtures and the
+installer runs against a fake downloader. Live downloads are an opt-in test category (`TACK_LIVE_TESTS=1`).
+
+### Checkpoint 0: spike the sources (no product code)
+
+A throwaway console under `spikes/m10-installs/`. Findings go in `docs/m10-spike-findings.md`.
+
+- **Node:** the shape of `https://nodejs.org/dist/index.json` (the `lts` field, the `files` keys `win-x64-zip` and
+  `win-arm64-zip`), the `SHASUMS256.txt` format, and the zip's top-level folder. Which versions ship corepack,
+  and whether the oldest version still in active use has an arm64 zip.
+- **Python:** the python.org install-manager index (`index-windows.json` and any paging): fields, hash format, how
+  pre-releases and free-threaded builds are marked, how far back it goes. The package layout, and whether
+  `pip` is present or needs `python -m ensurepip` after unpacking.
+- **Python relocation:** run from an arbitrary folder with nothing in the registry: `python -m venv`, `pip install`
+  and `import ssl, sqlite3, tkinter` all work.
+- **Long paths:** unpacking Node's deep `node_modules\npm\...` under `%LOCALAPPDATA%\tack\installs\` works.
+- **EDR:** whether unpacking and running from the installs folder trips CrowdStrike or Defender on this machine.
+  If it's blocked, stop and raise it with SecOps; don't look for ways around it.
+
+**Done when:** each source's index, hash and layout is written down with a trimmed sample saved as a test
+fixture, and any decision above that turned out wrong is amended here.
+
+### Checkpoint 1: ADR 0003 and the config model
+
+- `docs/adr/0003-managed-installs.md`: tack may download tools, on request only. It records I1, I3, I7 and the
+  trust position. Downloads run as you with no elevation, into folders you own: the same baseline as T5 in the
+  [trust model](design/dispatch-trust-model.md), and the same as fnm or scoop.
+- `InstalledVersion`: add `ExtraBinDirs` and `Install` (`Source`, `Url`, `Sha256`, `InstalledAt`), both null by
+  default. `ResolvedVersion` gains `ExtraBinDirs`; `ConfigCompiler` copies it across.
+- `BinaryLocator` and the shim search `BinDir`, then each extra folder (I5). `which` and `info` use the same code.
+- `TackPaths.User.InstallsDir` (plus its `.staging`, `.trash` and `.cache` folders).
+- `VersionOrder` (I14), with `ToolRegistry.Remove` switched over to it.
+- Pull registration out of `ToolsAddCommand` into Core (`ToolRegistry.Register`) for I16. `tool add` keeps its
+  behaviour and output.
+
+**Done when:** the unit tests pass, `ShimTests` pass with a version that exposes a command from an extra bin
+folder, and `tool add` behaves exactly as before.
+
+### Checkpoint 2: sources, version specs, aliases (pure)
+
+- `Installs/IToolSource`: `Parse(index) -> RemoteVersion[]` (version, LTS name, pre-release, per-architecture
+  archive URL and hash) and `Plan(version, arch) -> InstallPlan` (URL, expected SHA-256, folder to strip,
+  exposes, extra bin folders, post-install step).
+- `NodeSource` and `PythonSource` over the checkpoint 0 fixtures. Node's hash comes from `SHASUMS256.txt`, so
+  planning a Node install takes that file as a second input.
+- Spec resolution: exact version, dotted prefix (`20`, `3.12`, never `3.121`), `latest`, `lts` (Node only), with
+  the I13 pre-release rules.
+
+**Done when:** every resolution rule has a fixture test, including the errors (unknown version, `python@lts`, no
+build for this architecture, only a pre-release matches).
+
+### Checkpoint 3: the install engine
+
+- `IDownloader` with an `HttpClient` implementation (HTTPS only, progress callbacks, cancellable) and a fake one
+  for tests.
+- `Installer.Install(plan)`: take the mutex, sweep stale staging, download, check the SHA-256 (I3), unpack
+  with the checks in I11, check the exposed files exist, run the post-install step, write `.tack-install.json`,
+  rename into place (I10). Each failure deletes its staging folder.
+- `Installer.Remove(path)`: the I7 ownership checks, then rename to trash, then delete (I9).
+- Index cache: one hour, `--refresh` to bypass. A failed fetch with a cache available says it's using the cache
+  and how old it is.
+
+**Done when:** tests cover a hash mismatch, a zip-slip entry, a missing exposed file, a cancelled download,
+leftover staging from a killed process, a folder outside the installs root, a folder without a receipt, and a
+locked folder on remove.
+
+### Checkpoint 4: `tack tool install`
+
+- `ToolsInstallCommand`: resolve the spec, print `node@20 -> 20.11.1`, refuse collisions (I8), download with a
+  Spectre progress bar (like `UpdateCommand`), install, register through `ToolRegistry.Register`, `Shims.Sync`,
+  then the usual shadowed-name report and the disabled and not-on-PATH notes from `tool add`.
+- An error for an unsupported tool lists the ones that are supported and points to `tool add` for everything else.
+- Offline or proxy failures name the URL that failed and what to check.
+
+**Done when:** on this machine, `tool install node@lts` and `tool install python@3.12` work end to end, and
+`node -v`, `npm -v`, `python -V` and `pip -V` run through the shims under a `tack.yml` pin. The live test
+category covers the same.
+
+### Checkpoint 5: managed versions in `remove`, `list`, `info` and `doctor`
+
+- `tool remove`: managed versions delete their files (I9). The picker labels them `managed, deletes files`.
+  `--keep-files` keeps them (the folder stays, the receipt is removed from config).
+- `tool list`: a `managed` marker. `--expand` adds the source line. `info <tool>` shows where it came from.
+- `doctor`: a missing managed folder says to reinstall with `tack tool install <tool>@<version>`. Folders under
+  `installs\` that nothing is registered for are reported, and `--fix` deletes them if they have a receipt.
+  Leftover `.trash` and `.staging` are cleaned by `--fix`. The folder-permission check from the user-path plan
+  covers `installs\` explicitly.
+
+**Done when:** removing a managed version with node running from it fails without changing the config, and
+succeeds once node exits.
+
+### Checkpoint 6: `tack tool available`
+
+- `tack tool available <tool> [prefix]`: by default the newest version of each major (Node) or minor (Python),
+  with LTS names, pre-releases hidden, and versions you already have marked `installed`. A prefix lists every
+  match; `--all` lists everything.
+
+**Done when:** it works from the cache when offline and says how old the cache is.
+
+### Checkpoint 7: docs
+
+- README: the "Bring your own installs" bullet becomes "bring your own installs, or let tack fetch Node and
+  Python". A new **Managed installs** section covers the layout, integrity (and its limits), remove semantics and
+  the npm and pip behaviour from the open questions below. The antivirus note mentions `installs\`.
+- Scope plan §2: mark the non-goal as lifted, pointing to ADR 0003.
+- CHANGELOG `[Unreleased]`.
+
+### Checkpoint 8: manual end-to-end check (you run it)
+
+From a local `publish.bat` build, on a profile with nvm and fnm removed:
+
+1. `tool available node`, then `tool install node@lts` and `tool install node@20`. Pin each in a `tack.yml` and
+   run `node -v` from a terminal, from Visual Studio and from a scheduled task that runs as you.
+2. `tool install python@latest`. Run `python -m venv .venv`, activate it, and check that `pip install` lands in
+   the venv.
+3. `npm i -g typescript` and `pip install black`: record where they land and whether `tsc` and `black` can be
+   run (see the open questions).
+4. Remove a version while it's running, then after it exits.
+5. Go offline: `available` uses the cache, and `install` fails with a clear message and nothing half-installed.
+6. `tack update`: the installs survive.
+
+## Open questions (not blocking checkpoint 0)
+
+- **Global npm packages.** Node's bundled `npmrc` sets the global prefix to `%APPDATA%\npm`, so `npm i -g` lands
+  in one folder shared by every Node version (as with nvm-windows), and that folder isn't on PATH unless
+  something else put it there. We could add it to PATH ourselves, set `NPM_CONFIG_PREFIX` per version through the
+  existing per-version env (globals per version, like nvm on Unix), or leave it alone and document it. Depends
+  on what checkpoint 8 step 3 shows.
+- **Commands installed later.** `pip install black` puts `black.exe` in that version's `Scripts\`, but exposes are
+  fixed when a version is installed, so `black` isn't shimmed. Rescanning managed versions on reshim was left
+  out of the first cut; revisit with the npm question.
+- **Signatures.** Node's GPG-signed `SHASUMS256.txt.sig` and python.org's Sigstore bundles would turn I3's
+  integrity check into an authenticity check. Both need a verification library in the CLI.
+- **More tools.** The obvious next sources are .NET SDKs, Go and Java (Temurin). `IToolSource` should take them
+  without changes to the engine, which is the test of whether checkpoint 2's interface is right.
+- **A mirror setting** for networks that block nodejs.org or python.org (I15).
