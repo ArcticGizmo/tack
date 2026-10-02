@@ -26,7 +26,7 @@ public sealed class ConfigStoreTests : IDisposable
         {
             Tools = { ["node"] = new RegisteredTool { Versions = { ["20.11.0"] = new InstalledVersion { BinDir = @"C:\n20", Exposes = { "node", "npm" } } } } },
             Defaults = { ["node"] = "20.11.0" },
-            Zones = { new Zone { Path = @"C:\work", Tool = "node", Version = "20.11.0", Enforce = true } },
+            Zones = { new Zone { Path = @"C:\work", Tool = "node", Version = "20.11.0", IgnoreTackFiles = true } },
         };
         store.Save(c);
 
@@ -35,7 +35,8 @@ public sealed class ConfigStoreTests : IDisposable
         Assert.Equal("20.11.0", loaded.Defaults["node"]);
         var z = Assert.Single(loaded.Zones);
         Assert.Equal(@"C:\work", z.Path);
-        Assert.True(z.Enforce);
+        Assert.True(z.IgnoreTackFiles);
+        Assert.Contains("\"ignoreTackFiles\": true", File.ReadAllText(store.Path));
         Assert.Contains("npm", loaded.Tools["node"].Versions["20.11.0"].Exposes);
         Assert.DoesNotContain("bindings", File.ReadAllText(store.Path)); // a clean config never writes the legacy key
     }

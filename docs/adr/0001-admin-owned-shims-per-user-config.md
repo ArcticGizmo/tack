@@ -83,7 +83,7 @@ The obvious objection: malware running as you edits `resolved.json` (or register
 common) and waits for a privileged process to run it. Whether that works depends on **who** the privileged
 process runs as.
 
-**SYSTEM, services and other users: it doesn't work, and tack enforces that.** The shim never reads the caller's
+**SYSTEM, services and other users: it doesn't work, and tack makes sure of that.** The shim never reads the caller's
 config for another account. A SYSTEM task running `net` or `node` finds no config for SYSTEM and passes straight
 through to the real binary. Your registrations can't change what runs for anyone else, so elevating config
 writes would add nothing here.

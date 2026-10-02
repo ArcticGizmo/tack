@@ -32,7 +32,7 @@ decides, the UI presents). No resolution or maintenance logic lives in the front
 | **Dashboard** | Summary (tools/versions/bindings/defaults + shims-on-PATH) and how every tool resolves for a chosen directory (defaults to cwd). | `ResolveAll`, `Doctor` |
 | **Inspector** | Pick any folder; per-tool resolution + a detail panel (version, source, why, binary). The "why is that IDE using the wrong node?" debugger. | `ResolveAll` |
 | **Registry** | Register installs (tool@version -> binDir + exposes, with auto-detect), set default, remove. Saves + reshims. | `ToolProbe`, `ConfigStore`, `Reshimmer` |
-| **Bindings** | Central glob -> tool@version rules, with an `enforce` flag; add / remove. Saves + reshims. | `ConfigStore`, `Reshimmer` |
+| **Bindings** | Central glob -> tool@version rules, with a flag to beat `tack.yml`; add / remove. Saves + reshims. | `ConfigStore`, `Reshimmer` |
 | **PATH** | PathDoctor checks + the effective PATH visualised, shims dir highlighted and shadowers flagged. Read-only. | `PathDoctor` |
 | **Shims** | Generated shims, stale ones flagged, one-click reshim. | `Reshimmer` |
 

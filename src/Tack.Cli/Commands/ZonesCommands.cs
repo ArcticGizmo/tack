@@ -20,7 +20,7 @@ public sealed class ZonesAddSettings : CommandSettings
 
     [CommandOption("--ignore-tack-files")]
     [Description("Apply this zone even where a repo's tack.yml picks another version.")]
-    public bool Enforce { get; init; }
+    public bool IgnoreTackFiles { get; init; }
 
     public override ValidationResult Validate()
     {
@@ -52,14 +52,14 @@ public sealed class ZonesAddCommand : Command<ZonesAddSettings>
         string version = none ? ZoneVersion.None : spec.Version!;
         var config = env.Load();
 
-        var result = ZoneRegistry.Set(config, dir, spec.Tool, version, settings.Enforce);
+        var result = ZoneRegistry.Set(config, dir, spec.Tool, version, settings.IgnoreTackFiles);
         env.Save(config);
 
         var zone = new Zone { Path = dir, Tool = spec.Tool, Version = version };
         string what = $"{Markup.Escape(dir)} -> {Markup.Escape(ZoneText.Spec(zone))}"
-            + (settings.Enforce ? " [red](ignores tack files)[/]" : "");
+            + (settings.IgnoreTackFiles ? " [red](ignores tack files)[/]" : "");
         if (result.Previous is { } p)
-            AnsiConsole.MarkupLine($"[green]updated zone[/] {what} [grey](was {Markup.Escape(p.Version)}{(p.Enforce ? ", ignoring tack files" : "")})[/]");
+            AnsiConsole.MarkupLine($"[green]updated zone[/] {what} [grey](was {Markup.Escape(p.Version)}{(p.IgnoreTackFiles ? ", ignoring tack files" : "")})[/]");
         else
             AnsiConsole.MarkupLine($"[green]added zone[/] {what}");
 
@@ -67,8 +67,8 @@ public sealed class ZonesAddCommand : Command<ZonesAddSettings>
         {
             string subject = all ? "any tool" : spec.Tool;
             string overrides = all
-                ? (settings.Enforce ? "a tool's own zone that ignores tack files" : "a tool's own zone or a tack.yml")
-                : (settings.Enforce ? "a deeper zone that ignores tack files" : "a deeper zone or a tack.yml");
+                ? (settings.IgnoreTackFiles ? "a tool's own zone that ignores tack files" : "a tool's own zone or a tack.yml")
+                : (settings.IgnoreTackFiles ? "a deeper zone that ignores tack files" : "a deeper zone or a tack.yml");
             AnsiConsole.MarkupLine($"[grey]tack won't resolve {Markup.Escape(subject)} here or below (unless {overrides} says otherwise) - commands go to the next one on PATH.[/]");
         }
         if (!Directory.Exists(dir))
@@ -112,7 +112,7 @@ public sealed class ZonesListCommand : Command
             table.AddRow(Markup.Escape(z.Path),
                 ZoneTool.IsAll(z.Tool) ? "[yellow]all tools[/]" : Markup.Escape(z.Tool),
                 ZoneVersion.IsNone(z.Version) ? "[yellow]none[/] [grey](tack off)[/]" : Markup.Escape(z.Version),
-                z.Enforce ? "[red]yes[/]" : "");
+                z.IgnoreTackFiles ? "[red]yes[/]" : "");
         AnsiConsole.Write(table);
         return 0;
     }
@@ -203,7 +203,7 @@ public sealed class ZonesRemoveCommand : Command<ZonesRemoveSettings>
     }
 
     private static string Label(Zone z) =>
-        $"{z.Path}  {ZoneText.Spec(z)}{(z.Enforce ? "  (ignores tack files)" : "")}";
+        $"{z.Path}  {ZoneText.Spec(z)}{(z.IgnoreTackFiles ? "  (ignores tack files)" : "")}";
 }
 
 internal static class ZoneText

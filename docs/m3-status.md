@@ -13,7 +13,7 @@
 | `tack shims` | Generated shims + the shims dir + a PATH-health line. |
 | `tack doctor` | Checklist: shims dir exists / on PATH / shadowed by another install / stale shims / missing binDirs. |
 | `tack register <tool@ver> --path <binDir> [--exposes a,b,c]` | Adds an install to the registry (auto-detects exposes), sets the first version as default, and reshims. |
-| `tack bind <glob> <tool@ver> [--enforce]` | Adds a central directory binding and reshims. |
+| `tack bind <glob> <tool@ver>` | Adds a central directory binding (optionally one that beats `tack.yml`) and reshims. |
 | `tack use <tool[@ver]>` | Writes/updates `tack.yml` in the cwd (version defaults to the registered default/highest). |
 | `tack reshim` | Recompiles `config.json` -> `resolved.json` and stamps/prunes shim copies. |
 | `tack open` / `ui` | Launches `tack-ui`. |

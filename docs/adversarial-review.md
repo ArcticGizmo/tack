@@ -29,7 +29,7 @@ The attacker is a malicious program running as the tack user, at normal (non-adm
 | 4 | Medium | `apply-machine-path` accepts any folder without checking it | **gone**: the command was deleted, along with every UAC relaunch |
 | 5 | Medium | Auto-detected commands can take over unrelated system commands | **mostly fixed**: shims on the user PATH can't get ahead of System32, and Windows' own names are refused or skipped. Two tools exposing the same name still isn't reported. |
 | 6 | Low | Environment-variable overrides are honoured in release builds | from code |
-| 7 | Low | Enforced zones are easy to bypass | from code |
+| 7 | Low | Zones that ignore tack files are easy to bypass | from code |
 | 8 | Low | A repo's `tack.yml` can pick versions that carry environment variables | from code |
 | 9 | Low | The invocation log records secrets and can be forged | from code |
 | 10 | Low | Release-pipeline hardening | from code |
@@ -269,18 +269,18 @@ None of these gives something already running as the user new power, since it co
 - Remove `TACK_RESOLVED` and `TACK_SHIM_DEBUG` from release builds, or only honour a `TACK_RESOLVED` file owned by the calling user.
 - Make the repo override an explicit `--repo` flag rather than an environment variable, and print the update source on every update.
 
-### 7. Low: enforced zones are easy to bypass
+### 7. Low: zones that ignore tack files are easy to bypass
 
-The code comments call enforced zones "org enforcement" (`Resolver.cs:56`), but:
+The code comments presented these zones as an org-level control (`Resolver.cs:56`), but:
 
 - `TACK_<TOOL>_VERSION` outranks them (`Resolver.cs:82`),
 - zone matching compares path strings, so reaching the same folder through a `subst` drive, a junction, an 8.3 short name or `\\localhost\c$\...` skips the zone.
 
-That's fine for keeping yourself on track, but it isn't a control. Either say so in the documentation, or put the enforced-zone check before the environment variable and compare real paths (`GetFinalPathNameByHandle`), paying that cost only when enforced zones exist.
+That's fine for keeping yourself on track, but it isn't a control. Either say so in the documentation, or check these zones before the environment variable and compare real paths (`GetFinalPathNameByHandle`), paying that cost only when such zones exist.
 
 ### 8. Low: a repo's `tack.yml` can pick versions that carry environment variables
 
-The README already notes that a `tack.yml` can select `claude: work` by name. A cloned, untrusted repo can therefore switch its commands to the work account's `CLAUDE_CONFIG_DIR`, and it also beats non-enforced zones.
+The README already notes that a `tack.yml` can select `claude: work` by name. A cloned, untrusted repo can therefore switch its commands to the work account's `CLAUDE_CONFIG_DIR`, and it also beats ordinary zones.
 
 The search walks up to the drive root (`Resolver.cs:96-104`). On shared drives (other volumes, network shares, folders another user created), another user can plant an ancestor `tack.yml`. The choice is limited to registered versions, which is why this is low.
 

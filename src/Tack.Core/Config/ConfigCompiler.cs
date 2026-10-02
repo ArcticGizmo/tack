@@ -62,7 +62,7 @@ public static class ConfigCompiler
         Path = z.Path,
         Key = ZonePath.Normalize(z.Path),
         Version = z.Version,
-        Enforce = z.Enforce,
+        IgnoreTackFiles = z.IgnoreTackFiles,
         AllTools = allTools,
     };
 }

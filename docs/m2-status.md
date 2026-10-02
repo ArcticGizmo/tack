@@ -7,10 +7,10 @@
 
 | Piece | Where | Notes |
 | --- | --- | --- |
-| Central config model (`config.json`) | `Tack.Core/Config/CentralConfig.cs` | registry (tool@version -> binDir + exposes), bindings (glob -> tools, `enforce`), defaults, settings. |
+| Central config model (`config.json`) | `Tack.Core/Config/CentralConfig.cs` | registry (tool@version -> binDir + exposes), bindings (glob -> tools, optionally beating `tack.yml`), defaults, settings. |
 | Compiled config (`resolved.json`) | `Tack.Core/Config/ResolvedConfig.cs` | flat shim-facing form + source-gen JSON (`TackJson`, AOT-safe). |
 | Compiler | `Tack.Core/Config/ConfigCompiler.cs` | builds the exposed-name -> owning-tool index, splits bindings per tool with a precomputed specificity. |
-| Resolver (full precedence) | `Tack.Core/Resolution/Resolver.cs` | env override -> enforced binding -> nearest `tack.yml` (walk-up) -> binding -> default -> passthrough; records the winning source for `tack info`. |
+| Resolver (full precedence) | `Tack.Core/Resolution/Resolver.cs` | env override -> binding that beats `tack.yml` -> nearest `tack.yml` (walk-up) -> binding -> default -> passthrough; records the winning source for `tack info`. |
 | Glob matcher | `Tack.Core/Resolution/Glob.cs` | `*` (segment), `**` (any depth, trailing `/**` matches the base), case-insensitive; specificity ranking. |
 | Version matching | `Tack.Core/Resolution/VersionMatch.cs` | exact, else highest dotted-prefix match (so `python: 3.12` -> `3.12.4`). |
 | Binary locator | `Tack.Core/Resolution/BinaryLocator.cs` | probes `.exe`/`.cmd`/`.bat` in a version's binDir. |
@@ -21,7 +21,7 @@
 ## Tested (38 tests total)
 
 Glob matching + specificity; version prefix matching; mini-yaml parsing; compiler index/bindings; the full
-precedence ladder (env / enforce / tack.yml / binding / default / passthrough, plus unregistered and
+precedence ladder (env / binding over tack.yml / tack.yml / binding / default / passthrough, plus unregistered and
 version-not-installed); the shim end-to-end on the real schema (tack.yml walk-up, env override, `.cmd` vs
 native dispatch, stdin, passthrough); and the **mini vs full tack.yml parser agreement** guardrail.
 

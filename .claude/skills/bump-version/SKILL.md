@@ -85,7 +85,7 @@ In `CHANGELOG.md`:
 - **Write for the end user, not the developer.** Describe what changed for someone *using* tack. Mention
   implementation details only when they genuinely matter to the user (e.g. "existing config carries over").
   Internal refactors, file moves, and plumbing don't get a bullet at all.
-- **Keep bullets snappy - this is the rule that gets ignored most, so enforce it hard.** Aim for a short
+- **Keep bullets snappy - this is the rule that gets ignored most, so hold to it.** Aim for a short
   phrase, roughly ten words or fewer; one line, never two. Cut "now", "the ability to", "you can now". Drop
   the trailing "so you can..." rationale - the change speaks for itself; keep an aside only when it earns
   the dry humour. After drafting, reread every bullet and shorten any that runs long.

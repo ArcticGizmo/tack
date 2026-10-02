@@ -50,5 +50,5 @@ keeps the registry/bindings the user built up. **2 new tests; 49 total, all gree
 
 M0-M5 complete the v1 scope: the shim (M1), resolution + config (M2), the CLI (M3), the desktop UI (M4),
 and a hardened, self-updating distribution story (M5). The remaining items are the plan's explicit "Later"
-bucket - `enforce` polish, macOS/Linux heads, global-bin enumeration + auto-reshim (5.5/5.6), version
+bucket - polish for zones that beat `tack.yml`, macOS/Linux heads, global-bin enumeration + auto-reshim (5.5/5.6), version
 *installation* backends, central-config sync, and signing + WinGet.

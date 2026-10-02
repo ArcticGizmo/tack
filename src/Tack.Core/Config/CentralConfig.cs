@@ -59,8 +59,8 @@ public sealed class Zone
     /// <summary>A version (or prefix), or <see cref="ZoneVersion.None"/> to turn tack off for the tool here.</summary>
     public string Version { get; set; } = "";
 
-    /// <summary>When true, this zone beats a repo tack.yml (org enforcement). Default false.</summary>
-    public bool Enforce { get; set; }
+    /// <summary>When true, this zone beats a repo tack.yml. Default false.</summary>
+    public bool IgnoreTackFiles { get; set; }
 }
 
 /// <summary>
@@ -93,7 +93,6 @@ public sealed class LegacyBinding
 {
     public string Glob { get; set; } = "";
     public Dictionary<string, string> Tools { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-    public bool Enforce { get; set; }
 }
 
 public sealed class TackSettings
