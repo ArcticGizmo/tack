@@ -101,6 +101,65 @@ public sealed class ToolRegistryTests
     }
 
     [Fact]
+    public void Removing_the_default_repoints_by_version_number_not_text()
+    {
+        // As text, "9.11.2" > "10.0.0" > "10.2.0"; as versions, 10.2.0 is the highest.
+        var c = new CentralConfig { Defaults = { ["node"] = "20.0.0" } };
+        foreach (var v in new[] { "9.11.2", "10.0.0", "10.2.0", "20.0.0" })
+            ToolRegistry.Register(c, "node", v, new InstalledVersion { BinDir = $@"C:\n{v}" });
+
+        ToolRegistry.Remove(c, new[] { ("node", "20.0.0") });
+
+        Assert.Equal("10.2.0", c.Defaults["node"]);
+        Assert.Equal(new[] { "9.11.2", "10.0.0", "10.2.0" }, ToolRegistry.VersionsOf(c, "node"));
+    }
+
+    [Fact]
+    public void Register_makes_the_first_version_the_default_and_leaves_it_after()
+    {
+        var c = new CentralConfig();
+
+        Assert.True(ToolRegistry.Register(c, "node", "20.11.0", new InstalledVersion { BinDir = @"C:\n20" }));
+        Assert.False(ToolRegistry.Register(c, "node", "18.19.0", new InstalledVersion { BinDir = @"C:\n18" }));
+
+        Assert.Equal("20.11.0", c.Defaults["node"]);
+        Assert.Equal(new[] { "18.19.0", "20.11.0" }, ToolRegistry.VersionsOf(c, "node"));
+    }
+
+    [Fact]
+    public void Register_always_exposes_the_tools_own_name_first()
+    {
+        var c = new CentralConfig();
+        var iv = new InstalledVersion { BinDir = @"C:\n20", Exposes = { "npm", "npx" } };
+
+        ToolRegistry.Register(c, "node", "20.11.0", iv);
+
+        Assert.Equal(new[] { "node", "npm", "npx" }, c.Tools["node"].Versions["20.11.0"].Exposes);
+    }
+
+    [Fact]
+    public void Register_keeps_the_tools_own_name_where_it_was_given()
+    {
+        var c = new CentralConfig();
+        ToolRegistry.Register(c, "node", "20.11.0", new InstalledVersion { BinDir = @"C:\n20", Exposes = { "npm", "NODE" } });
+        Assert.Equal(new[] { "npm", "NODE" }, c.Tools["node"].Versions["20.11.0"].Exposes);
+    }
+
+    [Fact]
+    public void Re_registering_a_version_replaces_all_of_it()
+    {
+        var c = TwoNodes();
+        c.Tools["node"].Versions["20.11.0"].Env = new() { ["A"] = "1" };
+
+        ToolRegistry.Register(c, "node", "20.11.0", new InstalledVersion { BinDir = @"C:\elsewhere" });
+
+        var v = c.Tools["node"].Versions["20.11.0"];
+        Assert.Equal(@"C:\elsewhere", v.BinDir);
+        Assert.Null(v.Env);
+        Assert.Equal("20.11.0", c.Defaults["node"]);
+    }
+
+    [Fact]
     public void A_none_zone_is_never_reported_as_orphaned()
     {
         var c = TwoNodes();

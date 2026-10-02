@@ -125,6 +125,69 @@ public class VersionMatchTests
     [Fact] public void Dotted_prefix() => Assert.Equal("20.11.0", VersionMatch.Best(Installed, "20.11"));
     [Fact] public void No_match_is_null() => Assert.Null(VersionMatch.Best(Installed, "21"));
     [Fact] public void Prefix_respects_dot_boundary() => Assert.Null(VersionMatch.Best(new[] { "20.1.0" }, "2"));
+    [Fact] public void Prefix_prefers_a_release_over_its_pre_release() =>
+        Assert.Equal("3.15.0", VersionMatch.Best(new[] { "3.15.0rc2", "3.15.0", "3.15.0b4" }, "3.15"));
+}
+
+public class VersionOrderTests
+{
+    [Theory]
+    [InlineData("10.0.0", "9.11.2")]       // numeric, not text
+    [InlineData("20.11.0", "20.9.0")]
+    [InlineData("3.12.0", "3.12")]         // a missing segment sorts first
+    [InlineData("3.15.0", "3.15.0rc2")]    // a release beats its pre-release
+    [InlineData("3.15.0rc2", "3.15.0rc1")]
+    [InlineData("3.15.0rc1", "3.15.0b4")]  // a < b < rc
+    [InlineData("3.15.0b1", "3.15.0a7")]
+    [InlineData("3.15.0a1", "3.14.8")]     // a pre-release of a newer version still beats an older release
+    [InlineData("work", "personal")]       // names compare as text
+    [InlineData("personal", "20")]         // against a number, a name compares as text: digits sort first
+    public void Orders_newer_after_older(string newer, string older)
+    {
+        Assert.True(VersionOrder.Compare(newer, older) > 0, $"{newer} should sort after {older}");
+        Assert.True(VersionOrder.Compare(older, newer) < 0, $"{older} should sort before {newer}");
+    }
+
+    [Theory]
+    [InlineData("20.11.0", "20.11.0")]
+    [InlineData("Work", "work")]
+    [InlineData("3.15.0RC2", "3.15.0rc2")]
+    public void Equal_versions_compare_equal(string a, string b) => Assert.Equal(0, VersionOrder.Compare(a, b));
+
+    [Fact]
+    public void Sorts_a_list()
+    {
+        var sorted = new[] { "10.0.0", "3.15.0rc2", "9.0.0", "3.15.0", "3.14.8" }.Order(VersionOrder.Comparer);
+        Assert.Equal(new[] { "3.14.8", "3.15.0rc2", "3.15.0", "9.0.0", "10.0.0" }, sorted);
+    }
+
+    [Fact]
+    public void A_number_too_long_for_a_long_still_compares()
+    {
+        Assert.NotEqual(0, VersionOrder.Compare("99999999999999999999999", "1"));
+    }
+}
+
+public class BinaryLocatorTests
+{
+    [Fact]
+    public void Searches_the_bin_dirs_in_order()
+    {
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { @"C:\py\python.exe", @"C:\py\Scripts\pip.exe" };
+        string[] dirs = { @"C:\py", @"C:\py\Scripts" };
+
+        Assert.Equal(@"C:\py\python.exe", BinaryLocator.Locate(dirs, "python", files.Contains));
+        Assert.Equal(@"C:\py\Scripts\pip.exe", BinaryLocator.Locate(dirs, "pip", files.Contains));
+        Assert.Null(BinaryLocator.Locate(dirs, "black", files.Contains));
+    }
+
+    [Fact]
+    public void An_earlier_dir_wins_whatever_the_extensions()
+    {
+        // Every extension is tried in one folder before the next, as cmd does.
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { @"C:\a\pip.cmd", @"C:\b\pip.exe" };
+        Assert.Equal(@"C:\a\pip.cmd", BinaryLocator.Locate(new[] { @"C:\a", @"C:\b" }, "pip", files.Contains));
+    }
 }
 
 public class MiniTackYmlTests
@@ -216,6 +279,30 @@ public class CompilerTests
         Assert.Null(rc.Tools["node"].Versions["18.19.0"].Env);
         string json = System.Text.Json.JsonSerializer.Serialize(rc, TackJson.Default.ResolvedConfig);
         Assert.Equal(1, json.Split("\"env\"").Length - 1); // only the version that has one writes the key
+    }
+
+    [Fact]
+    public void Extra_bin_dirs_reach_the_resolution_and_are_left_out_when_empty()
+    {
+        var central = Sample();
+        central.Tools["node"].Versions["20.11.0"].ExtraBinDirs = new() { @"C:\tools\node20\extra" };
+        central.Tools["node"].Versions["18.19.0"].ExtraBinDirs = new(); // empty is the same as none
+        var rc = ConfigCompiler.Compile(central);
+
+        Assert.Null(rc.Tools["node"].Versions["18.19.0"].ExtraBinDirs);
+        string json = System.Text.Json.JsonSerializer.Serialize(rc, TackJson.Default.ResolvedConfig);
+        Assert.Equal(1, json.Split("\"extraBinDirs\"").Length - 1);
+
+        var ctx = new ResolverContext { GetEnv = _ => null, ReadFileOrNull = _ => null };
+        var r = new Resolver(rc).Resolve("npm", @"C:\elsewhere", ctx); // the default, 20.11.0
+        Assert.Equal(new[] { @"C:\tools\node20", @"C:\tools\node20\extra" }, r.BinDirs);
+    }
+
+    [Fact]
+    public void An_unresolved_name_searches_no_bin_dirs()
+    {
+        var ctx = new ResolverContext { GetEnv = _ => null, ReadFileOrNull = _ => null };
+        Assert.Empty(new Resolver(ConfigCompiler.Compile(Sample())).Resolve("ruby", @"C:\x", ctx).BinDirs);
     }
 
     internal static CentralConfig Sample()

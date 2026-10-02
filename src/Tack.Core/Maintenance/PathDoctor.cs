@@ -126,11 +126,12 @@ public static class PathDoctor
         foreach (var bad in ShimName.Invalid(config))
             report.Add("Invalid command name", CheckStatus.Fail, $"{bad}; it's never intercepted - fix it in config.json");
 
-        // Missing binDirs.
+        // Missing binDirs (and extra bin folders).
         foreach (var (toolName, tool) in config.Tools)
             foreach (var (version, iv) in tool.Versions)
-                if (!dirExists(iv.BinDir))
-                    report.Add($"Missing binDir for {toolName}@{version}", CheckStatus.Fail, iv.BinDir);
+                foreach (var dir in iv.BinDirs())
+                    if (!dirExists(dir))
+                        report.Add($"Missing binDir for {toolName}@{version}", CheckStatus.Fail, dir);
 
         // Pre-zones bindings with a mid-path wildcard: no single-directory equivalent, so they no longer apply.
         foreach (var glob in ZoneRegistry.Unmigrated(config))

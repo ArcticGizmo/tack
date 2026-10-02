@@ -27,6 +27,7 @@ public static class ConfigCompiler
                     BinDir = iv.BinDir,
                     Exposes = new List<string>(iv.Exposes),
                     Env = iv.Env is { Count: > 0 } env ? new Dictionary<string, string>(env, StringComparer.OrdinalIgnoreCase) : null,
+                    ExtraBinDirs = iv.ExtraBinDirs is { Count: > 0 } extra ? new List<string>(extra) : null,
                 };
                 foreach (var exposed in iv.Exposes) rc.Index[exposed] = toolName;
             }

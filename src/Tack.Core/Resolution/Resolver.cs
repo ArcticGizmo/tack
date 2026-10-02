@@ -35,6 +35,14 @@ public sealed class Resolution
     /// <summary>The selected version's environment variables (unexpanded; see <see cref="VersionEnv"/>), or null.</summary>
     public IReadOnlyDictionary<string, string>? Env { get; init; }
 
+    /// <summary>The selected version's directories searched after <see cref="BinDir"/>, or null.</summary>
+    public IReadOnlyList<string>? ExtraBinDirs { get; init; }
+
+    /// <summary>Where the selected version's commands are looked for, in order: <see cref="BinDir"/>, then
+    /// <see cref="ExtraBinDirs"/>. Empty when nothing was selected.</summary>
+    public IEnumerable<string> BinDirs => BinDir is null ? Array.Empty<string>()
+        : ExtraBinDirs is { } extra ? extra.Prepend(BinDir) : new[] { BinDir };
+
     /// <summary>True when a concrete, installed version was selected.</summary>
     public bool Resolved => Source is ResolutionSource.EnvOverride or ResolutionSource.ZoneIgnoringTackFiles
         or ResolutionSource.TackYml or ResolutionSource.Zone or ResolutionSource.Default;
@@ -154,6 +162,7 @@ public sealed class Resolver
             Version = match,
             BinDir = rt.Versions[match].BinDir,
             Env = rt.Versions[match].Env,
+            ExtraBinDirs = rt.Versions[match].ExtraBinDirs,
             Detail = detail,
         };
     }

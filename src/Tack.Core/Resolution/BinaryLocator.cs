@@ -27,4 +27,15 @@ public static class BinaryLocator
         }
         return null;
     }
+
+    /// <summary>The first directory, in order, that holds <paramref name="exposedName"/>: a version's binDir and then
+    /// its extra bin folders (see <see cref="Resolution.BinDirs"/>). Every extension is tried in one directory before
+    /// the next, so a binDir's <c>pip.cmd</c> beats an extra folder's <c>pip.exe</c>.</summary>
+    public static string? Locate(IEnumerable<string> binDirs, string exposedName, Func<string, bool> fileExists)
+    {
+        foreach (var dir in binDirs)
+            if (Locate(dir, exposedName, fileExists) is { } found)
+                return found;
+        return null;
+    }
 }

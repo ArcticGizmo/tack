@@ -91,7 +91,11 @@ A throwaway console under `spikes/m10-installs/`. Findings go in `docs/m10-spike
 **Done when:** each source's index, hash and layout is written down with a trimmed sample saved as a test
 fixture, and any decision above that turned out wrong is amended here.
 
-### Checkpoint 1: ADR 0003 and the config model
+### Checkpoint 1: ADR 0003 and the config model ✅ 2026-10-02
+
+Done: [ADR 0003](adr/0003-managed-installs.md). Two things came out of it. `VersionOrder` also fixed prefix
+matching, which used to pick `3.15.0rc2` over `3.15.0` for a `3.15` pin. And `tool list` shows extra bin folders
+under the version's path (`also:` with `--expand`).
 
 - `docs/adr/0003-managed-installs.md`: tack may download tools, on request only. It records I1, I3, I7 and the
   trust position. Downloads run as you with no elevation, into folders you own: the same baseline as T5 in the

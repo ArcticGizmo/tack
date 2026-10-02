@@ -39,6 +39,33 @@ public sealed class ConfigStoreTests : IDisposable
         Assert.Contains("\"ignoreTackFiles\": true", File.ReadAllText(store.Path));
         Assert.Contains("npm", loaded.Tools["node"].Versions["20.11.0"].Exposes);
         Assert.DoesNotContain("bindings", File.ReadAllText(store.Path)); // a clean config never writes the legacy key
+        Assert.DoesNotContain("extraBinDirs", File.ReadAllText(store.Path)); // nor a version's optional keys
+        Assert.DoesNotContain("install", File.ReadAllText(store.Path));
+    }
+
+    [Fact]
+    public void Round_trips_a_managed_version()
+    {
+        var store = new ConfigStore(Path.Combine(_dir, "config.json"));
+        var at = new DateTimeOffset(2026, 10, 2, 13, 15, 0, TimeSpan.FromHours(10));
+        var c = new CentralConfig
+        {
+            Tools = { ["python"] = new RegisteredTool { Versions = { ["3.12.10"] = new InstalledVersion
+            {
+                BinDir = @"C:\i\python\3.12.10",
+                ExtraBinDirs = new() { @"C:\i\python\3.12.10\Scripts" },
+                Exposes = { "python", "pip" },
+                Install = new InstallReceipt { Source = "python.org", Url = "https://example.org/p.zip", Sha256 = "ab12", InstalledAt = at },
+            } } } },
+        };
+        store.Save(c);
+
+        var v = store.Load().Tools["python"].Versions["3.12.10"];
+        Assert.Equal(new[] { @"C:\i\python\3.12.10\Scripts" }, v.ExtraBinDirs);
+        Assert.Equal("python.org", v.Install!.Source);
+        Assert.Equal("https://example.org/p.zip", v.Install.Url);
+        Assert.Equal("ab12", v.Install.Sha256);
+        Assert.Equal(at, v.Install.InstalledAt);
     }
 
     [Fact]

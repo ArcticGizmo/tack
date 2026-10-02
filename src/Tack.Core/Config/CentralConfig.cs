@@ -44,6 +44,32 @@ public sealed class InstalledVersion
     /// <summary>Environment variables set for this version's process (see <see cref="VersionEnv"/>). Null when
     /// there are none, so a plain version never writes the key.</summary>
     public Dictionary<string, string>? Env { get; set; }
+
+    /// <summary>More absolute directories holding this version's executables, searched after <see cref="BinDir"/>
+    /// (Python's <c>Scripts\</c>, where <c>pip.exe</c> lives). Null when there are none.</summary>
+    public List<string>? ExtraBinDirs { get; set; }
+
+    /// <summary>Where tack downloaded this version from, when <c>tack tool install</c> put it there. Null for a
+    /// version registered with <c>tack tool add</c>. tack only ever deletes the files of a version that has one.</summary>
+    public InstallReceipt? Install { get; set; }
+
+    /// <summary><see cref="BinDir"/>, then each of <see cref="ExtraBinDirs"/>: where this version's commands are looked for.</summary>
+    public IEnumerable<string> BinDirs() => ExtraBinDirs is { } extra ? extra.Prepend(BinDir) : new[] { BinDir };
+}
+
+/// <summary>A managed version's provenance (<c>tack tool install</c>), recorded when it was installed.</summary>
+public sealed class InstallReceipt
+{
+    /// <summary>The source that resolved it, e.g. "nodejs.org" or "python.org".</summary>
+    public string Source { get; set; } = "";
+
+    /// <summary>The archive it was unpacked from.</summary>
+    public string Url { get; set; } = "";
+
+    /// <summary>The archive's SHA-256, as published by the vendor and checked before unpacking (lowercase hex).</summary>
+    public string Sha256 { get; set; } = "";
+
+    public DateTimeOffset InstalledAt { get; set; }
 }
 
 /// <summary>A central rule: <see cref="Path"/> and every directory under it resolves <see cref="Tool"/> to

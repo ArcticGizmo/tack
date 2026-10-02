@@ -44,8 +44,8 @@ public sealed class InfoCommand : Command<InfoSettings>
             tree.AddNode($"source: {Render.SourceMarkup(r.Source)} [grey]{Markup.Escape(r.Detail ?? "")}[/]");
             if (r.Resolved && r.BinDir is not null)
             {
-                string? target = BinaryLocator.Locate(r.BinDir, tool, File.Exists);
-                tree.AddNode($"binary: {Markup.Escape(target ?? $"(no '{tool}' in {r.BinDir})")}");
+                string? target = BinaryLocator.Locate(r.BinDirs, tool, File.Exists);
+                tree.AddNode($"binary: {Markup.Escape(target ?? $"(no '{tool}' in {string.Join(" or ", r.BinDirs)})")}");
             }
             if (Shadow(env, tool) is { } shadow)
                 tree.AddNode($"[yellow]not intercepted:[/] {Markup.Escape(shadow.Advice)}");
@@ -108,10 +108,10 @@ public sealed class WhichCommand : Command<WhichSettings>
             AnsiConsole.MarkupLine($"[red]{Markup.Escape(settings.Tool)} does not resolve here ({r.Source}).[/]");
             return 1;
         }
-        string? target = BinaryLocator.Locate(r.BinDir, settings.Tool, File.Exists);
+        string? target = BinaryLocator.Locate(r.BinDirs, settings.Tool, File.Exists);
         if (target is null)
         {
-            AnsiConsole.MarkupLine($"[red]no '{Markup.Escape(settings.Tool)}' binary in {Markup.Escape(r.BinDir)}[/]");
+            AnsiConsole.MarkupLine($"[red]no '{Markup.Escape(settings.Tool)}' binary in {Markup.Escape(string.Join(" or ", r.BinDirs))}[/]");
             return 1;
         }
         Console.WriteLine(target); // plain + scriptable, like `mise which`

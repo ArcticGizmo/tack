@@ -108,19 +108,11 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
                 exposes.Remove(name);
             }
         }
-        if (!exposes.Any(x => string.Equals(x, spec.Tool, StringComparison.OrdinalIgnoreCase)))
-            exposes.Insert(0, spec.Tool); // the tool's own name must be shimmed
-
         var config = env.Load();
-        if (!config.Tools.TryGetValue(spec.Tool, out var tool))
-        {
-            tool = new RegisteredTool();
-            config.Tools[spec.Tool] = tool;
-        }
         var versionEnv = VersionEnv.Parse(settings.Env, out _); // already validated
-        tool.Versions[spec.Version!] = new InstalledVersion { BinDir = binDir, Exposes = exposes, Env = versionEnv };
-        if (!config.Defaults.ContainsKey(spec.Tool))
-            config.Defaults[spec.Tool] = spec.Version!;
+        // Also makes sure the tool's own name is shimmed (it's added to exposes if missing).
+        ToolRegistry.Register(config, spec.Tool, spec.Version!,
+            new InstalledVersion { BinDir = binDir, Exposes = exposes, Env = versionEnv });
 
         env.Save(config);
         AnsiConsole.MarkupLine($"[green]added[/] {Markup.Escape(spec.Tool)}@{Markup.Escape(spec.Version!)} -> {Markup.Escape(binDir)}");
@@ -216,14 +208,14 @@ public sealed class ToolsListCommand : Command<ToolsListSettings>
             var r = resolver.Resolve(name, cwd, ctx);
             string? here = r.Resolved ? r.Version : null;
 
-            foreach (var (version, installed) in tool.Versions.OrderBy(v => v.Key, StringComparer.OrdinalIgnoreCase))
-                rows.Add(new Row(name, version, installed.BinDir,
+            foreach (var (version, installed) in tool.Versions.OrderBy(v => v.Key, VersionOrder.Comparer))
+                rows.Add(new Row(name, version, installed.BinDir, installed.ExtraBinDirs ?? new List<string>(),
                     // The command names tack intercepts for this version.
                     string.Join(", ", installed.Exposes.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)),
                     Render.EnvLines(installed.Env),
                     IsDefault: string.Equals(version, def, StringComparison.OrdinalIgnoreCase),
                     IsHere: string.Equals(version, here, StringComparison.OrdinalIgnoreCase),
-                    Missing: !Directory.Exists(installed.BinDir)));
+                    Missing: !installed.BinDirs().All(Directory.Exists)));
         }
 
         if (settings.Expand) WriteExpanded(rows);
@@ -234,8 +226,8 @@ public sealed class ToolsListCommand : Command<ToolsListSettings>
         return 0;
     }
 
-    private sealed record Row(string Tool, string Version, string BinDir, string Commands, List<string> Env,
-        bool IsDefault, bool IsHere, bool Missing);
+    private sealed record Row(string Tool, string Version, string BinDir, List<string> ExtraBinDirs, string Commands,
+        List<string> Env, bool IsDefault, bool IsHere, bool Missing);
 
     /// <summary>The compact view. The tool name is shown on its first row only; the version cell carries the
     /// default / resolves-here markers. Long paths wrap inside their cell - <c>--expand</c> is for copying. The env
@@ -255,9 +247,10 @@ public sealed class ToolsListCommand : Command<ToolsListSettings>
             string versionCell = Markup.Escape(x.Version)
                 + (x.IsDefault ? " [grey]default[/]" : "")
                 + (x.IsHere ? " [green]here[/]" : "");
-            string pathCell = x.Missing
-                ? $"[red]{Markup.Escape(x.BinDir)} (missing)[/]"
-                : Markup.Escape(x.BinDir);
+            // Extra bin folders go on their own lines under the binDir, each marked if it's the missing one.
+            string pathCell = string.Join('\n', x.ExtraBinDirs.Prepend(x.BinDir).Select(dir => Directory.Exists(dir)
+                ? Markup.Escape(dir)
+                : $"[red]{Markup.Escape(dir)} (missing)[/]"));
             var cells = new List<string>
             {
                 x.Tool == previous ? "" : Markup.Escape(x.Tool), versionCell, pathCell,
@@ -285,6 +278,8 @@ public sealed class ToolsListCommand : Command<ToolsListSettings>
                 + (x.IsHere ? " [green]here[/]" : "")
                 + (x.Missing ? " [red]missing[/]" : ""));
             Console.WriteLine($"  path:     {x.BinDir}");
+            foreach (var dir in x.ExtraBinDirs)
+                Console.WriteLine($"  also:     {dir}");
             Console.WriteLine($"  commands: {x.Commands}");
             foreach (var line in x.Env)
                 Console.WriteLine($"  env:      {line}");
