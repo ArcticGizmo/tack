@@ -314,6 +314,7 @@ public sealed class InstallerTests : IDisposable
     public void Running_processes_are_found_by_their_folder()
     {
         // A real process: the test stub waits on its stdin, so it keeps running from a folder until that's closed.
+        if (!OperatingSystem.IsWindows()) return;
         string bin = AppContext.BaseDirectory;
         Directory.CreateDirectory(Target);
         foreach (var f in Directory.GetFiles(bin, "tack-stub.*"))

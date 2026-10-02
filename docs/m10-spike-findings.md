@@ -110,6 +110,36 @@ them, running `node`, `npm.cmd`, `python`, the regenerated `pip.exe` and a venv'
 from PyPI. All of it ran under the repo folder. Running from `%LOCALAPPDATA%\tack\installs\` itself is untested
 until checkpoint 4's first real install.
 
+## Behind a TLS-inspecting gateway (found after checkpoint 6)
+
+Reported as "the download sits at 0% for 15 seconds". On this machine's network, traffic to nodejs.org and
+python.org goes through a **Cato Networks** gateway that intercepts TLS: the certificate presented for
+`nodejs.org` is issued by `CN=Cato-Networks-Server-percatod5a`, trusted through a root in the Windows store. It
+scans downloads, and **holds an archive until it has fetched and checked all of it**:
+
+| Windows `curl.exe`, the same path as tack | TLS done | first byte | total |
+|---|---|---|---|
+| Node zip, all 30 MB | 0.05 s | **20.0 s** | 23.7 s |
+| the same zip, first 1 KB (`-r 0-1023`) | 0.04 s | 0.07 s | 0.07 s |
+| `SHASUMS256.txt` from the same host | 0.05 s | 0.09 s | 0.09 s |
+
+DNS, proxy discovery (WPAD is on, but answers "direct" in about 30 ms), IPv6 (no route, so it fails at once) and
+certificate revocation were all measured and ruled out. Any downloader waits the same 20 seconds here. tack can't
+shorten it, so it explains it instead: a spinner, "Waiting for www.python.org to send python 3.13.16...", runs until
+bytes flow. After 5 seconds it adds the elapsed time and "some networks scan a download in full before passing it on".
+Before this fix, a progress bar sat at `0/1 byte`.
+
+Two side effects:
+
+- **The SHA-256 check is weaker behind a gateway like this.** The archive and its published hash both come through
+  something that decrypts and could rewrite traffic. The check still catches corrupt and truncated downloads, but
+  only a signature check (Node's GPG, Python's Sigstore; open question 3 in the plan) would catch a gateway that
+  changed both.
+- **Windows can't check revocation for the gateway's certificate** (`CRYPT_E_NO_REVOCATION_CHECK`), so schannel
+  clients that insist on it fail: `curl.exe`, and Git's curl when it's built on schannel. .NET's `HttpClient` doesn't
+  check revocation by default, which is why tack works. **Don't turn revocation checking on.** `Online` and `Offline`
+  both fail the handshake here (`RevocationStatusUnknown`).
+
 ## Fixtures for checkpoint 2
 
 `tests/Tack.Tests/Fixtures/Installs/` (the full indexes stay in the git-ignored `spikes/m10-installs/data/`):

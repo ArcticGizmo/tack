@@ -9,6 +9,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.2.2] - 2026-10-02
+
+- `tool install` says it's waiting for the server, instead of sitting at `0/1 byte`
+- A slow start explains itself (some networks scan the whole download first)
+
+---
+
 ## [v0.2.1] - 2026-10-02
 
 - `tack tool install node@lts` downloads Node or Python and registers it

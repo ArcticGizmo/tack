@@ -58,7 +58,7 @@ Uninstalling tack keeps them along with the rest of tack's data, as it does toda
 | I12 | **Python is the python.org build:** the hashed zips listed in its install-manager index (`index-windows.json` and its `next` pages), `pythoncore-*` entries only. That puts the **floor at 3.11.0**. Older versions are only on NuGet with no hash in the index, and asking for one says so. Never the embeddable zip (`pythonembed-*`): its `._pth` file switches off `site` and it has no pip. No `py` launcher, no `python3` alias, and no PEP 514 registry entries. tack still writes nothing but its own user PATH entries. | python-build-standalone; NuGet packages for 3.10 and older |
 | I13 | **Pre-releases only when named exactly.** `python@latest` and `python@3.15` skip `3.15.0rc2`; `python@3.15.0rc2` installs it. Free-threaded builds (`3.13t`) are out of the first cut. Python has no LTS, so `python@lts` is an error that says to use `latest` or a version. A version with no Windows build (Python's source-only security releases, such as 3.12.12) doesn't exist as far as tack is concerned: `python@3.12` gets 3.12.10. | including pre-releases |
 | I14 | **Versions are ordered numerically, not as strings.** One shared `VersionOrder` in Core does "newest" for aliases, `available` and the default repointing in `ToolRegistry.Remove`, which today orders by string and so picks `9.0` over `10.0`. | string order |
-| I15 | **Network calls use the system proxy** (`HttpClient`'s default on Windows). No mirror setting in the first cut. | a `TACK_NODE_MIRROR`-style setting now |
+| I15 | **Network calls use the system proxy** (`HttpClient`'s default on Windows). No mirror setting in the first cut. **Certificate revocation isn't checked** (also `HttpClient`'s default). A TLS-inspecting gateway's certificate often can't be checked, and Windows clients that insist, like `curl.exe`, fail outright behind one (found after checkpoint 6). | a `TACK_NODE_MIRROR`-style setting now; revocation checking |
 | I16 | **The first version installed becomes the default,** the same rule as `tool add`. Both paths go through one Core registration function, so they can't drift. | separate rules for install |
 | I17 | **Python's post-install step creates pip's launchers offline:** `python -I -m pip --isolated install --force-reinstall --no-index --no-deps --find-links Lib\ensurepip\_bundled pip`, run in the final folder (I10). `-I` and `--isolated` keep your `PYTHON*` and `PIP_*` variables and pip config out of it (`PIP_REQUIRE_VIRTUALENV` would otherwise refuse). The spike ran it without those two flags, so checkpoint 4's first real install confirms them. The zip ships pip in `site-packages` but no `Scripts\`, and `ensurepip --upgrade` does nothing when pip is already there. | exposing no `pip` (only `python -m pip`) |
 
@@ -276,7 +276,10 @@ From a local `publish.bat` build, on a profile with nvm and fnm removed:
   reshim was left out of the first cut. Checkpoint 0 makes it look cheap: rescan `BinDir` and `ExtraBinDirs`, and
   skip the source's known non-commands (`install_tools`, `nodevars`). It's the first follow-up to pick up.
 - **Signatures.** Node's GPG-signed `SHASUMS256.txt.sig` and python.org's Sigstore bundles would turn I3's
-  integrity check into an authenticity check. Both need a verification library in the CLI.
+  integrity check into an authenticity check. Both need a verification library in the CLI. This matters more
+  than it first looked: behind a TLS-inspecting gateway (found after checkpoint 6, see the
+  [findings](m10-spike-findings.md#behind-a-tls-inspecting-gateway-found-after-checkpoint-6)), the archive and its
+  hash both arrive through something that could rewrite them.
 - **More tools.** The obvious next sources are .NET SDKs, Go and Java (Temurin). `IToolSource` should take them
   without changes to the engine, which is the test of whether checkpoint 2's interface is right.
 - **A mirror setting** for networks that block nodejs.org or python.org (I15).

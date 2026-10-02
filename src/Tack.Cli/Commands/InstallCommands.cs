@@ -210,16 +210,7 @@ public sealed class ToolsInstallCommand : AsyncCommand<ToolsInstallSettings>
 
         // 4. Download, check, unpack, place, post-install.
         var installer = new Installer(TackPaths.User.InstallsDir, net, new ProcessRunner());
-        InstalledVersion installed = null!;
-        await AnsiConsole.Progress()
-            .AutoClear(true)
-            .Columns(new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new DownloadedColumn())
-            .StartAsync(async ctx =>
-            {
-                var task = ctx.AddTask($"Downloading {Markup.Escape(source.Tool)} {Markup.Escape(version)}", maxValue: 1);
-                installed = await installer.InstallAsync(plan, new Inline<InstallProgress>(p => Show(task, p)), cancel);
-                task.Value = task.MaxValue;
-            });
+        var installed = await RunWithProgress(installer, plan, $"{source.Tool} {version}", cancel);
 
         // 5. Register, as tool add does. Loaded again so nothing changed during the download is lost.
         var config = env.Load();
@@ -235,13 +226,83 @@ public sealed class ToolsInstallCommand : AsyncCommand<ToolsInstallSettings>
         return 0;
     }
 
+    /// <summary>How long a wait for the first byte goes before the spinner says why it might be taking a while.</summary>
+    private static readonly TimeSpan SlowStart = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Run the install with a spinner until bytes flow, then a progress bar. Until the server starts sending, the size
+    /// isn't known, and a network that scans downloads (a TLS-inspecting gateway such as Cato or Zscaler) holds an
+    /// archive until it has fetched and checked all of it: 20 seconds for Node's 30 MB zip on the machine this was
+    /// found on. So the wait is shown as a wait, with the time and the likely reason once it's slow.
+    /// </summary>
+    private static async Task<InstalledVersion> RunWithProgress(Installer installer, InstallPlan plan, string what,
+        CancellationToken cancel)
+    {
+        var flowing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new object();
+        ProgressTask? bar = null;
+        InstallProgress? latest = null;
+        var report = new Inline<InstallProgress>(p =>
+        {
+            lock (gate)
+            {
+                latest = p;
+                if (bar is not null) Show(bar, p);
+            }
+            if (p.Stage != InstallStage.Downloading || p.Download is { Received: > 0 })
+                flowing.TrySetResult();
+        });
+        var install = installer.InstallAsync(plan, report, cancel);
+
+        string host = Markup.Escape(plan.Url.Host);
+        string waiting = $"Waiting for {host} to send {Markup.Escape(what)}...";
+        await AnsiConsole.Status().StartAsync(waiting, async ctx =>
+        {
+            var waited = System.Diagnostics.Stopwatch.StartNew();
+            while (await Task.WhenAny(flowing.Task, install, Task.Delay(1000, CancellationToken.None)) is var done
+                   && done != flowing.Task && done != install)
+            {
+                if (waited.Elapsed >= SlowStart)
+                    ctx.Status($"{waiting} {(int)waited.Elapsed.TotalSeconds}s [grey](some networks scan a download in full before passing it on)[/]");
+            }
+        });
+
+        // Finished, failed or cancelled while still waiting: that's the result (an exception surfaces here).
+        if (install.IsCompleted) return await install;
+
+        InstalledVersion installed = null!;
+        await AnsiConsole.Progress()
+            .AutoClear(true)
+            .Columns(new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new DownloadedColumn())
+            .StartAsync(async ctx =>
+            {
+                lock (gate)
+                {
+                    bar = ctx.AddTask($"Downloading {Markup.Escape(what)}");
+                    if (latest is { } l) Show(bar, l);
+                }
+                installed = await install;
+                bar.Value = bar.MaxValue;
+            });
+        return installed;
+    }
+
     // One progress bar through the stages: bytes while downloading, then indeterminate with the stage's name.
     private static void Show(ProgressTask task, InstallProgress p)
     {
         if (p.Stage == InstallStage.Downloading && p.Download is { } d)
         {
-            if (d.Total is { } total && total > 0) task.MaxValue = total;
-            else task.IsIndeterminate = true;
+            if (d.Total is { } total && total > 0)
+            {
+                task.IsIndeterminate = false;
+                task.MaxValue = total;
+            }
+            else
+            {
+                // No size from the server: count what's arrived rather than show a made-up total.
+                task.IsIndeterminate = true;
+                task.MaxValue = Math.Max(d.Received, 1);
+            }
             task.Value = d.Received;
             return;
         }
