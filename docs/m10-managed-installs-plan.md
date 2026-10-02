@@ -167,7 +167,23 @@ Done: `Installer`, `HttpDownloader`, `ProcessRunner` and `IndexCache` in `src/Ta
 leftover staging from a killed process, a folder outside the installs root, a folder without a receipt, and a
 locked folder on remove.
 
-### Checkpoint 4: `tack tool install`
+### Checkpoint 4: `tack tool install` ✅ 2026-10-02
+
+Done: `ToolsInstallCommand` (`src/Tack.Cli/Commands/InstallCommands.cs`), plus the opt-in `LiveInstallTests`
+(`TACK_LIVE_TESTS=1`). Checked by hand against the dev profile:
+
+- `node@lts` resolved to 24.21.0 and was **refused**, because the dev profile already had 24.21.0 registered
+  from fnm (I8).
+- `node@20` installed 20.20.2, and `python@3.12` installed 3.12.10 with `pip` and `pip3` exposed from `Scripts\`.
+  Through the dev shims under a `tack.yml` pin, `node -v`, `npm -v`, `python -V`, `pip -V` and `python -m venv`
+  all worked. npm's global prefix is the install folder. A repeat install is a no-op.
+- **EDR:** nothing was blocked downloading, unpacking or running from `%LOCALAPPDATA%\tack (Dev)\installs\`
+  (carried over from checkpoint 0).
+- **I17's isolation flags are proven:** with `PIP_REQUIRE_VIRTUALENV=1` set, the bare pip command fails (exit 3)
+  and tack's `-I --isolated` one succeeds.
+- **Not checked by hand:** Ctrl-C mid-download. The engine's cancel path is unit-tested; the CLI wires it to
+  `Console.CancelKeyPress`. Checkpoint 8 covers it.
+- `tool add` and `tool install` now share their closing notes (`ToolsAddCommand.Reach`).
 
 - `ToolsInstallCommand`: resolve the spec, print `node@20 -> 20.11.1`, refuse collisions (I8), download with a
   Spectre progress bar (like `UpdateCommand`), install, register through `ToolRegistry.Register`, `Shims.Sync`,

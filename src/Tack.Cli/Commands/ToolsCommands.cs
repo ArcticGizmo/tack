@@ -120,13 +120,21 @@ public sealed class ToolsAddCommand : Command<ToolsAddSettings>
         foreach (var line in Render.EnvLines(versionEnv))
             AnsiConsole.MarkupLine($"[grey]env:[/] {Markup.Escape(line)}");
         Shims.Sync(env, config);
+        Reach(env, config, exposes, search);
+        return 0;
+    }
+
+    /// <summary>After registering: whether plain calls to <paramref name="exposes"/> will actually reach tack - it's
+    /// disabled, the shims aren't on PATH yet, or something earlier on PATH provides a name. Shared with
+    /// <c>tool install</c>.</summary>
+    internal static void Reach(TackEnvironment env, CentralConfig config, IEnumerable<string> exposes, CommandSearch? search)
+    {
         if (config.Settings.Disabled)
             AnsiConsole.MarkupLine("[yellow]note:[/] tack is disabled - this is configured but won't take effect until [green]tack enable[/].");
         else if (!Render.OnPath(env.ShimsDir))
             AnsiConsole.MarkupLine($"[yellow]note:[/] the shims dir is not on PATH yet - installing tack wires it up, or run [green]{Shims.RepairCommand}[/].");
         else if (search is not null)
             Render.Shadows(exposes.Select(n => search.Explain(n, env.ShimsDir, TackPaths.User.AllShimsDirs)));
-        return 0;
     }
 
     /// <summary>Discover the tool's binDir from PATH (like `where`), excluding tack's own dirs. One hit is used
