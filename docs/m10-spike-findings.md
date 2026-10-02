@@ -45,7 +45,7 @@ amendments are made in [the plan](m10-managed-installs-plan.md):
 | Index | `https://www.python.org/ftp/python/index-windows.json`, `{ "versions": [...], "next": "..." }` |
 | Paging | `index-windows.json` → `index-windows-recent.json` → `index-windows-legacy.json` (no `next`). 3 pages, about 900 KB, 963 entries, no version repeated across pages |
 | Order | **not sorted**: page 1 starts 3.13.16, 3.14.8, 3.15.0rc2. tack sorts with `VersionOrder` (I14) |
-| `id` | `pythoncore-3.13-64`, `-32`, `-arm64`; free-threaded is `pythoncore-3.13t-64`. Also `pythonembed-*` (the embeddable zip) and `pythontest-*` (the test suite), which tack ignores |
+| `id` | `pythoncore-3.13-64`, `-32`, `-arm64`; free-threaded is `pythoncore-3.13t-64`. Also `pythonembed-*` (the embeddable zip) and `pythontest-*` (the test suite), which tack ignores. Parse the `id`, not the `tag`: a pre-release's tag is `3.15-dev-64` (found in checkpoint 2) |
 | `sort-version` | `3.14.8`, `3.15.0rc2`, `3.15.0b4`, `3.15.0a7`. Pre-releases are marked only by the letters |
 | Archive + hash | `url` plus `hash.sha256` |
 | Coverage | hashed `www.python.org` zips for **3.11.0 onwards**. 3.5.2 to 3.10.11 (and 2.7.18) point at `api.nuget.org` `.nupkg` files with **no hash**. arm64 starts at 3.9.7 (NuGet), so 3.11 for hashed zips |

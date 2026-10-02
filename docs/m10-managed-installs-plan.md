@@ -47,7 +47,7 @@ Uninstalling tack keeps them along with the rest of tack's data, as it does toda
 | I1 | **The shim never touches the network, and a `tack.yml` never causes a download.** Installing is always an explicit command you type. | auto-installing a missing pinned version on first call |
 | I2 | **Register the exact version.** `node@20` and `node@lts` are resolved when you install; the registry gets `node@20.11.1`. Pins keep matching by dotted prefix, so `node: 20` in a `tack.yml` still picks it. | registering under the spec you typed |
 | I3 | **Fail closed on integrity.** HTTPS only (and no redirect down to HTTP). The archive's SHA-256 must match the vendor's published value (Node's `SHASUMS256.txt`, python.org's index), otherwise the download is deleted and nothing is registered. Checking signatures (Node's GPG, Python's Sigstore) comes later. As with `install.ps1`, a hash from the same host proves the bytes weren't damaged on the way, not who made them. | trusting TLS alone |
-| I4 | **The source declares what a version exposes,** filtered to the files that actually exist. A folder scan would pick up Node's `install_tools.bat` and `nodevars.bat`. Node: `node npm npx corepack` (corepack is gone by Node 26, so it's dropped there). Python: `python pythonw` plus `pip pip3` from `Scripts\` (I17). | `ToolProbe.DetectExposes` |
+| I4 | **The source declares what a version exposes,** filtered to the files that actually exist. A folder scan would pick up Node's `install_tools.bat` and `nodevars.bat`. Node: `node npm npx corepack` (corepack is gone by Node 26, so it's dropped there). Python: `python` plus `pip pip3` from `Scripts\` (I17). **Not `pythonw`:** the shim is a console program, so a `pythonw` shim would open the console window that `pythonw` exists to avoid (found in checkpoint 2). | `ToolProbe.DetectExposes` |
 | I5 | **A version can have extra bin folders.** `InstalledVersion.ExtraBinDirs` (null when empty, so plain versions never write the key) are searched after `BinDir`, by the shim and by `which`. That's how Python's `Scripts\pip.exe` is reached. | renaming `BinDir` to a list everywhere |
 | I6 | **Native architecture only.** x64 Windows gets x64 builds, arm64 gets arm64. If the vendor has no build for this architecture, the install fails and says so; there's no quiet fallback to emulated x64. | falling back to x64 on arm64 |
 | I7 | **tack only deletes what it installed.** A managed version carries an `Install` receipt in config (source, URL, SHA-256, date) **and** a `.tack-install.json` file in its folder. tack deletes a folder only if it is strictly inside the installs root and has that file. Everything registered with `tool add` is never deleted. | trusting the config flag alone |
@@ -60,7 +60,7 @@ Uninstalling tack keeps them along with the rest of tack's data, as it does toda
 | I14 | **Versions are ordered numerically, not as strings.** One shared `VersionOrder` in Core does "newest" for aliases, `available` and the default repointing in `ToolRegistry.Remove`, which today orders by string and so picks `9.0` over `10.0`. | string order |
 | I15 | **Network calls use the system proxy** (`HttpClient`'s default on Windows). No mirror setting in the first cut. | a `TACK_NODE_MIRROR`-style setting now |
 | I16 | **The first version installed becomes the default,** the same rule as `tool add`. Both paths go through one Core registration function, so they can't drift. | separate rules for install |
-| I17 | **Python's post-install step creates pip's launchers offline:** `python -m pip install --force-reinstall --no-index --no-deps --find-links Lib\ensurepip\_bundled pip`, run in the final folder (I10). The zip ships pip in `site-packages` but no `Scripts\`, and `ensurepip --upgrade` does nothing when pip is already there. | exposing no `pip` (only `python -m pip`) |
+| I17 | **Python's post-install step creates pip's launchers offline:** `python -I -m pip --isolated install --force-reinstall --no-index --no-deps --find-links Lib\ensurepip\_bundled pip`, run in the final folder (I10). `-I` and `--isolated` keep your `PYTHON*` and `PIP_*` variables and pip config out of it (`PIP_REQUIRE_VIRTUALENV` would otherwise refuse). The spike ran it without those two flags, so checkpoint 4's first real install confirms them. The zip ships pip in `site-packages` but no `Scripts\`, and `ensurepip --upgrade` does nothing when pip is already there. | exposing no `pip` (only `python -m pip`) |
 
 ## Checkpoints
 
@@ -111,7 +111,18 @@ under the version's path (`also:` with `--expand`).
 **Done when:** the unit tests pass, `ShimTests` pass with a version that exposes a command from an extra bin
 folder, and `tool add` behaves exactly as before.
 
-### Checkpoint 2: sources, version specs, aliases (pure)
+### Checkpoint 2: sources, version specs, aliases (pure) ✅ 2026-10-02
+
+Done: `src/Tack.Core/Installs/` (`IToolSource`, `NodeSource`, `PythonSource`, `ToolIndex`, `VersionSpec`,
+`Checksums`), tested in `InstallSourceTests`. Beyond the plan:
+
+- **Index hardening.** Sources skip any version that isn't a plain version string (an index can't name
+  `..\..\x` and have it become a folder) and any archive that isn't on HTTPS. `next` links must stay on the
+  index's host and HTTPS, can't loop, and stop at 10 pages.
+- **Pages are merged per version,** so an x64 build on one page and an arm64 build on another make one version.
+- **Python is parsed by `id`, not `tag`:** pre-releases are tagged `3.15-dev-64`. All 519 `pythoncore` entries in
+  the real index match the pattern.
+- **`node@v20` and `3.15.0RC2` are accepted** as `20` and `3.15.0rc2`.
 
 - `Installs/IToolSource`: `Parse(index) -> RemoteVersion[]` (version, LTS name, pre-release, per-architecture
   archive URL and hash) and `Plan(version, arch) -> InstallPlan` (URL, expected SHA-256, folder to strip,
