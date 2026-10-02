@@ -9,14 +9,14 @@
 
 <br>
 
-Tack is a **Windows** per-directory tool-version dispatcher. You install the versions of Node, Python or any other CLI yourself; tack makes sure that whenever *anything* runs a bare `node`, it gets the version that directory is supposed to use. That includes Visual Studio, Rider, a pre-build event, a background test runner or a scheduled task, none of which ever sourced your PowerShell profile.
+Tack is a **Windows** per-directory tool-version dispatcher. You register the versions of Node, Python or any other CLI you already have, or let tack fetch Node and Python for you; tack makes sure that whenever *anything* runs a bare `node`, it gets the version that directory is supposed to use. That includes Visual Studio, Rider, a pre-build event, a background test runner or a scheduled task, none of which ever sourced your PowerShell profile.
 
 Already know you want it? [Skip the details and install it ▼](#installing)
 
 ### At a glance
 
 - **Reaches what shell hooks can't.** `nvm use` and `mise activate` only change a shell that ran a hook. tack's shims are real files on PATH, so a GUI, a scheduled task and a terminal all hit them the same way, as long as they run as you.
-- **Bring your own installs.** tack doesn't download anything. Register what you already have (winget, an archive, nvm-windows) and tack handles the dispatch.
+- **Bring your own installs, or let tack fetch Node and Python.** Register what you already have (winget, an archive, nvm-windows), or run `tack tool install node@lts`. Nothing is downloaded unless you ask, and a repo can never make tack download anything.
 - **Pin it in the repo**, with a two-line `tack.yml` that's picked up the moment it's saved. No reshim needed.
 - **…or pin it without touching the repo.** A **zone** pins a directory and everything under it from your machine's own config. For the employer repo where nobody wants your tooling files committed.
 - **Always explains itself.** `tack info` tells you which version a directory gets *and the exact rule that won*.
@@ -84,6 +84,29 @@ tack tool remove                                 # interactive multi-select
 `tool add` works out which commands an install provides by scanning its folder (override with `--exposes node,npm,npx`). Leave out the folder and it finds the tool on PATH the way `where` does, skipping tack's own shims. If there's more than one match, you pick. PATH entries like `%NVM_HOME%` are expanded, so an nvm-windows install is registered by its real directory.
 
 Removing a version tidies up after itself: a tool left with nothing is dropped, a default pointing at the removed version moves to the highest one left, and any zone still pointing at it is flagged for you to fix.
+
+### Managed installs — letting tack fetch Node and Python
+
+```powershell
+tack tool available node            # the newest of each major, LTS marked
+tack tool available python 3.12     # every 3.12.x (--all adds what can't be installed here, and why)
+tack tool install node@lts          # the newest LTS, registered as e.g. node@24.21.0
+tack tool install node@20           # the newest 20.x
+tack tool install python@latest     # the newest stable Python
+tack tool remove node@20.20.2       # unregisters it and deletes its files
+```
+
+`tool install` downloads the official build (from nodejs.org, or python.org's zips), checks it, unpacks it into tack's own folder and registers it exactly as `tool add` would. It's opt-in: `tool add` still takes installs from anywhere, and the two mix freely. Only `tool install` and `tool available` use the network. The shim never does, and a `tack.yml` can never cause a download. A repo can pin `node: 20`, but only you decide to fetch it.
+
+- **Aliases are resolved when you install.** `node@20`, `node@lts` and `python@latest` register the exact version they found (`node@20.20.2`). Pins match by prefix, so `node: 20` in a `tack.yml` still picks it. Pre-releases are installed only when you name one exactly (`python@3.15.0rc2`). Python has no LTS, so `python@lts` is an error. A version that's already registered from somewhere else is refused rather than replaced, so remove it first.
+- **Where they go.** `%LocalAppData%\tack\installs\<tool>\<version>\`. It's local rather than roaming because these folders are hundreds of MB and specific to the machine's architecture. They survive `tack update`, and uninstalling tack keeps them along with the rest of its data. Builds are always for your machine's native architecture, with no quiet fallback to x64 emulation on arm64. That means Node 18 and older, which have no arm64 build, fail on arm64 and say so.
+- **Integrity fails closed.** Downloads are HTTPS only, every redirect included. The archive's SHA-256 has to match the vendor's published value (Node's `SHASUMS256.txt`, python.org's index), or the download is deleted and nothing is registered. Installs unpack into a staging folder and move into place only when complete, so a failed or interrupted install never leaves a half-registered version behind.
+- **What that check doesn't prove.** The hash comes from the same host as the archive, so it catches a damaged or truncated download but not a forged one. That's the same position `install.ps1` takes for tack itself, and only checking signatures (still to come) would close the gap. Behind a TLS-inspecting gateway, the archive and its hash both pass through something that could rewrite them. Gateways like that often hold a download until they've scanned all of it too. tack says it's waiting for the server rather than sitting at 0%.
+- **Python is 3.11 onwards,** since that's where python.org starts publishing hashed zips. Older versions can still be registered with `tool add`. The zip ships without `pip.exe`, so tack makes a working `pip` and `pip3` offline from the pip bundled in the zip. It adds no registry entries, `py` launcher or `python3` alias.
+- **Removal deletes what tack installed, and only that.** `tool remove` on a managed version deletes its folder. `--keep-files` leaves the folder and hands it to you, and tack never deletes it later. If anything is running from the folder, removal stops and names it (`node.exe (pid 1234)`), and the same goes for a terminal whose current directory is inside it. Nothing changes in that case. A version registered with `tool add` is never deleted, wherever it lives. Removing a Python breaks any venv made from it, and tack warns you first.
+- **Seeing them.** `tool list` marks managed versions (`--expand` adds where they came from), and `tack info node` names the source. `tack doctor --fix` sweeps up anything an interrupted install left behind.
+
+**npm and pip globals.** The Node zips don't ship the config the Node installer adds, so npm's global prefix is the version's own folder. `npm i -g typescript` is therefore per version, like nvm on Linux and macOS. Outside a venv, `pip install black` puts `black.exe` in that version's `Scripts\`. Both land in folders the version already searches, but **they aren't shimmed yet**, because the commands a version exposes are fixed when it's installed. Until rescanning lands, run them by full path (`tack which node` shows the folder) or as a module (`python -m black`). `pip install --user` goes to `%AppData%\Python\Python3XX\` as it does for any Python, which every install of that minor version shares.
 
 ### Environment variables per version
 
@@ -164,7 +187,8 @@ irm https://raw.githubusercontent.com/ArcticGizmo/tack/main/install.ps1 | iex
 That's the whole install, and it needs no admin. tack installs to `%LocalAppData%\Tack\`, adds a normal uninstaller under Settings → Apps, and puts the shims dir at the **front of your user PATH** and `tack` at the end of it. If anything went wrong with the PATH, `& "$env:LOCALAPPDATA\Tack\current\tack.exe" setup` puts it right. Open a **new** terminal afterwards so it picks up the PATH change, then:
 
 ```powershell
-tack tool add node@20.11.0
+tack tool add node@20.11.0      # register a node you already have
+tack tool install node@lts      # or let tack fetch one
 tack info
 ```
 
@@ -195,11 +219,11 @@ $want = (Select-String -Path SHA256SUMS.txt -Pattern 'Tack-win-Setup.exe').Line.
 
 ### A note on antivirus
 
-tack copies one small exe under the names of real tools and puts it on PATH. That's exactly what it's for, but it can look suspicious to endpoint security. The binaries aren't code-signed yet. On a managed machine (CrowdStrike, Defender for Endpoint and so on), ask your security team to allow-list `%LocalAppData%\Tack\` and `%LocalAppData%\tack\shims\` before a quarantine does it for you.
+tack copies one small exe under the names of real tools and puts it on PATH. That's exactly what it's for, but it can look suspicious to endpoint security. The binaries aren't code-signed yet. On a managed machine (CrowdStrike, Defender for Endpoint and so on), ask your security team to allow-list `%LocalAppData%\Tack\` and `%LocalAppData%\tack\shims\` before a quarantine does it for you. If you use `tack tool install`, add `%LocalAppData%\tack\installs\` too: the Node and Python it downloads are unpacked there and run from there. Unpacking takes a few seconds per version, mostly because of on-access scanning.
 
 ### Uninstalling
 
-Uninstall from Settings → Apps. tack's user PATH entries are removed, but your registry, zones and shims under `%LocalAppData%\tack\` are kept, so a reinstall picks up where you left off. Delete that folder too if you want a clean slate.
+Uninstall from Settings → Apps. tack's user PATH entries are removed, but your registry, zones, shims and managed installs under `%LocalAppData%\tack\` are kept, so a reinstall picks up where you left off. Delete that folder too if you want a clean slate.
 
 ## Updating
 
@@ -208,7 +232,7 @@ tack update --check   # is there anything new?
 tack update           # get it
 ```
 
-`tack update` downloads the latest release and swaps it in as the command exits. The next `tack` you type is the new one. Every shim is then restamped with the new build, so fixes to the proxy reach tools you registered long ago. Run `tack changelog` to see what changed.
+`tack update` downloads the latest release and swaps it in as the command exits. The next `tack` you type is the new one. Every shim is then restamped with the new build, so fixes to the proxy reach tools you registered long ago. Versions installed with `tack tool install` aren't touched. Run `tack changelog` to see what changed.
 
 The one-liner is only a verified download-and-run wrapper around the installer, so an install through it is
 an ordinary installed copy — Velopack owns everything from there, and you never need to re-run the script.
@@ -287,11 +311,14 @@ run.bat --help          # the CLI, from source
 dotnet test             # the test suite
 ```
 
+The tests never touch the network: install sources parse recorded indexes and the installer runs against a fake
+downloader. Set `TACK_LIVE_TESTS=1` to add the tests that really download from nodejs.org and python.org.
+
 `Tack.Core` is the engine (config, resolution, reshim and PATH handling). `Tack.Cli` is the Spectre.Console
 front end, and `Tack.Shim` is the NativeAOT proxy. The CLI only formats output: every decision is made in
 Core, so it's all unit-testable.
 
-Debug builds run as an isolated **dev profile**. They keep their own config, `resolved.json` and shims under
+Debug builds run as an isolated **dev profile**. They keep their own config, `resolved.json`, shims and managed installs under
 `%LocalAppData%\tack (Dev)\`, so hacking on tack never touches your real setup. After a rebuild,
 `run.bat reshim` refreshes the dev shims. Set `TACK_DEV=0` to point a debug build at the real profile, or
 `TACK_DEV=1` to force a release build into dev.

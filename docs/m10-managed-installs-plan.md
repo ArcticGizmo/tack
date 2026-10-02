@@ -244,7 +244,13 @@ how old it was, and `install` with nothing cached failed cleanly, leaving nothin
 
 **Done when:** it works from the cache when offline and says how old the cache is.
 
-### Checkpoint 7: docs
+### Checkpoint 7: docs ✅ 2026-10-02
+
+Done. The README has the new bullet and a **Managed installs** section, and also mentions `installs\` under
+uninstalling, updating, the dev profile and the quick start, plus `TACK_LIVE_TESTS` under development. The scope
+plan's non-goal is struck through and points to ADR 0003, and M10 is listed among the milestones. The CHANGELOG
+needed nothing: v0.2.1 already lists every user-facing change, and a README edit isn't something
+`tack changelog` should report.
 
 - README: the "Bring your own installs" bullet becomes "bring your own installs, or let tack fetch Node and
   Python". A new **Managed installs** section covers the layout, integrity (and its limits), remove semantics and

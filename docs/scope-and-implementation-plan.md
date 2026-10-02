@@ -34,6 +34,7 @@ Most managers weld these together. **tack v1 does only (2).** You bring your own
 got them — winget, an archive, another manager); tack registers where they live and handles dispatch.
 Installation-as-a-feature is explicitly deferred (see Non-goals). This keeps the first version small
 and honest about what the hard, interesting part actually is: the dispatch layer.
+(Since lifted for Node and Python, on request only: [ADR 0003](adr/0003-managed-installs.md).)
 
 ### The problem it solves that shell-activation managers don't
 
@@ -61,8 +62,11 @@ static PATH entry, so they reach every process. That reach is the whole point of
 
 ### Non-goals (v1) — deliberately deferred
 
-- **Installing/building tool versions.** No downloading Node/Python. tack registers existing installs.
-  (A future "backends" feature could add this; it's a separable concern by design.)
+- ~~**Installing/building tool versions.** No downloading Node/Python. tack registers existing installs.
+  (A future "backends" feature could add this; it's a separable concern by design.)~~
+  **Lifted 2026-10-02** by [ADR 0003](adr/0003-managed-installs.md): `tack tool install` downloads Node and
+  Python on request, and `tool add` still takes installs from anywhere. See the
+  [M10 plan](m10-managed-installs-plan.md).
 - **Shell-activation mode** (mutating env on `cd`). Shims only — that's what makes IDE support work.
   A convenience `tack activate` for shells could come later; it is not the mechanism.
 - **macOS / Linux.** The Core is written platform-agnostic and the shim model ports cleanly (symlinks +
@@ -436,8 +440,10 @@ Ordered so there's a usable thing early and the risky part (the shim) is proven 
   suite, first-run PATH/shim wiring on install.
 - **Since.** Glob bindings (M2–M4) were replaced by plain-directory zones: `tack bind` → `tack zones`,
   and the UI's Bindings editor → Zones (see 3.3 and 4).
-- **Later.** Zones that ignore tack files; shell-activation convenience; macOS/Linux heads; version *installation*
-  backends; central-config sync; **dependent / global bins (5.5) and stamp-based auto-reshim (5.6)**;
+- **M10 — Managed installs.** `tack tool install` / `tool available` for Node and Python
+  ([ADR 0003](adr/0003-managed-installs.md), [plan](m10-managed-installs-plan.md)).
+- **Later.** Zones that ignore tack files; shell-activation convenience; macOS/Linux heads; more
+  installation backends (.NET, Go, Java); central-config sync; **dependent / global bins (5.5) and stamp-based auto-reshim (5.6)**;
   signing + WinGet.
 
 ---
