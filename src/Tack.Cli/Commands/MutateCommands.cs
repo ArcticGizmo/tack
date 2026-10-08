@@ -3,7 +3,9 @@ using System.Text;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using Tack.Core.Config;
+using Tack.Core.Installs;
 using Tack.Core.Maintenance;
+using Tack.Core.Resolution;
 
 namespace Tack.Cli.Commands;
 
@@ -71,8 +73,29 @@ public sealed class ReshimCommand : Command
 {
     public override int Execute(CommandContext context)
     {
-        // The explicit repair: also refreshes shims left over from an older shim build.
         var env = new TackEnvironment();
-        return Shims.Sync(env, env.Load(), checkPayload: true) ? 0 : 1;
+        var config = env.Load();
+
+        // Commands installed into managed versions since (npm i -g, pip install) become shims.
+        var search = OperatingSystem.IsWindows() ? CommandSearch.Current() : null;
+        var rescanned = ManagedCommands.Rescan(config,
+            name => search?.WindowsOwner(name) is { } windows ? $"a Windows command ({windows})" : null);
+        foreach (var r in rescanned)
+        {
+            string at = Markup.Escape($"{r.Tool}@{r.Version}");
+            if (r.Added.Count > 0)
+                AnsiConsole.MarkupLine($"[green]{at} added:[/] {Markup.Escape(string.Join(", ", r.Added))}");
+            if (r.Removed.Count > 0)
+                AnsiConsole.MarkupLine($"[grey]{at} no longer has:[/] {Markup.Escape(string.Join(", ", r.Removed))}");
+            foreach (var (name, why) in r.Skipped)
+                AnsiConsole.MarkupLine($"[yellow]{at}: not shimming '{Markup.Escape(name)}':[/] [grey]{Markup.Escape(why)}[/]");
+        }
+        if (rescanned.Any(r => r.Changed)) env.Save(config);
+
+        // The explicit repair: also refreshes shims left over from an older shim build.
+        bool synced = Shims.Sync(env, config, checkPayload: true);
+        var added = rescanned.SelectMany(r => r.Added).ToList();
+        if (added.Count > 0) ToolsAddCommand.Reach(env, config, added, search);
+        return synced ? 0 : 1;
     }
 }

@@ -76,10 +76,10 @@ app.Configure(cfg =>
     cfg.AddCommand<ChangelogCommand>("changelog")
         .WithDescription("Show what changed in tack (latest release; --all for the full history).");
 
-    // Hidden: every mutating command (and doctor --fix) already reshims; this is the escape hatch after a
-    // hand-edit of config.json.
-    cfg.AddCommand<ReshimCommand>("reshim").IsHidden()
-        .WithDescription("Recompile central config and regenerate the shims.");
+    // Every mutating command already reshims. This one is for commands installed into a managed version since
+    // (npm i -g, pip install), and after a hand-edit of config.json.
+    cfg.AddCommand<ReshimCommand>("reshim")
+        .WithDescription("Shim commands added to installed versions since (npm i -g, pip install), and regenerate the shims.");
 });
 
 return app.Run(args);

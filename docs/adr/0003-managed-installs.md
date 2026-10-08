@@ -76,4 +76,5 @@ Nothing here changes the [trust model](../design/dispatch-trust-model.md)'s posi
   Removing it breaks those venvs, and `tool remove` says so.
 - Python before 3.11 can't be installed by tack: python.org publishes no hash for those builds. `tool add` still
   takes them.
-- Commands added later (`npm i -g`, `pip install`) aren't shimmed until rescanning managed versions lands.
+- Commands added later (`npm i -g`, `pip install`) aren't shimmed until `tack reshim` rescans the managed
+  versions. Nothing runs it automatically yet (see §5.6 of the scope plan).

@@ -23,6 +23,8 @@ public sealed partial class PythonSource : IToolSource
     // avoid. pythonw.exe is still there in the install for anything that wants it by path.
     private static readonly string[] Exposes = { "python", "pip", "pip3" };
 
+    public IReadOnlyCollection<string> NotCommands { get; } = new[] { "pythonw" };
+
     // pip's launchers are made in the final folder, offline from the wheel the zip ships, and isolated from the
     // caller's PYTHON*/PIP_* variables and pip config (PIP_REQUIRE_VIRTUALENV would otherwise refuse).
     private static readonly PostInstallCommand PipLaunchers = new("python.exe",
