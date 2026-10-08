@@ -24,6 +24,10 @@ public interface IToolSource
     /// <summary>The index's first page.</summary>
     Uri IndexUrl { get; }
 
+    /// <summary>Files in an install's folders that look like commands but mustn't be shimmed (Node's
+    /// <c>nodevars.bat</c>), so a rescan for commands added later (<see cref="ManagedCommands"/>) leaves them out.</summary>
+    IReadOnlyCollection<string> NotCommands { get; }
+
     /// <summary>One page of the index: its versions, in whatever order the page lists them, and the next page's
     /// address as the page gives it (relative or absolute), or null on the last page.</summary>
     IReadOnlyList<RemoteVersion> ParsePage(string body, out string? next);
@@ -40,6 +44,12 @@ public static class ToolSources
 
     public static IToolSource? Find(string tool) =>
         All.FirstOrDefault(s => string.Equals(s.Tool, tool, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The source that installed a version of <paramref name="tool"/>, from its receipt's publisher; null
+    /// when tack no longer knows it.</summary>
+    public static IToolSource? Find(string tool, string publisher) =>
+        All.FirstOrDefault(s => string.Equals(s.Tool, tool, StringComparison.OrdinalIgnoreCase)
+                             && string.Equals(s.Publisher, publisher, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>Reads a source's whole index, following its pages.</summary>

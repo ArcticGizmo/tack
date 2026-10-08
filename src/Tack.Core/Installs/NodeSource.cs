@@ -17,8 +17,10 @@ public sealed class NodeSource : IToolSource
     public Uri IndexUrl { get; } = new("https://nodejs.org/dist/index.json");
 
     // corepack is gone by Node 26; the installer drops names that don't exist. install_tools.bat and nodevars.bat
-    // are deliberately left out.
+    // are deliberately left out, and a rescan leaves them out too.
     private static readonly string[] Exposes = { "node", "npm", "npx", "corepack" };
+
+    public IReadOnlyCollection<string> NotCommands { get; } = new[] { "install_tools", "nodevars" };
 
     private static readonly (Architecture Arch, string Name)[] Arches =
     {

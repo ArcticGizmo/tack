@@ -276,11 +276,10 @@ From a local `publish.bat` build, on a profile with nvm and fnm removed:
 
 - ~~**Global npm packages.**~~ Resolved by checkpoint 0: the zips don't ship the MSI's `npmrc`, so npm's global
   prefix is the install folder itself. `npm i -g` is per version, like nvm on Unix, and lands in `BinDir`.
-- **Commands installed later.** `npm i -g typescript` puts `tsc.cmd` in the version's folder, and
-  `pip install black` puts `black.exe` in its `Scripts\`. Both are in folders the version already searches, but
-  exposes are fixed when a version is installed, so neither command is shimmed. Rescanning managed versions on
-  reshim was left out of the first cut. Checkpoint 0 makes it look cheap: rescan `BinDir` and `ExtraBinDirs`, and
-  skip the source's known non-commands (`install_tools`, `nodevars`). It's the first follow-up to pick up.
+- ~~**Commands installed later.**~~ Done after v0.2.2: `tack reshim` (no longer hidden) rescans each managed
+  version's `BinDir` and `ExtraBinDirs` (`ManagedCommands`). It skips each source's `NotCommands` (`install_tools`,
+  `nodevars`, `pythonw`) and any name another tool already provides, and drops names whose files have gone.
+  Running it automatically after `npm i -g` is still open (scope plan §5.6).
 - **Signatures.** Node's GPG-signed `SHASUMS256.txt.sig` and python.org's Sigstore bundles would turn I3's
   integrity check into an authenticity check. Both need a verification library in the CLI. This matters more
   than it first looked: behind a TLS-inspecting gateway (found after checkpoint 6, see the

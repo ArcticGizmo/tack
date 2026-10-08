@@ -9,6 +9,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.2.3] - 2026-10-08
+
+- `tack reshim` shims what `npm i -g` and `pip install` added
+- ...and forgets what `npm uninstall -g` took away
+- Only for versions tack installed; `tool add` again for the rest
+- `nodevars` and `pythonw` still aren't commands, however hard they try
+- A global named after another tool is skipped, not quietly taken over
+- `reshim` is no longer hidden, now that it does something you'd ask for
+
+---
+
 ## [v0.2.2] - 2026-10-02
 
 - `tool install` says it's waiting for the server, instead of sitting at `0/1 byte`
